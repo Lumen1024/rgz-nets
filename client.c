@@ -12,24 +12,17 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-/* ── Константы ──────────────────────────────────────────────────────── */
-
 #define SERVER_PORT 8888      /* порт, на котором слушают серверы */
 #define MAX_SERVERS 64        /* максимум серверов в списке найденных */
 #define MAX_MESSAGE_SIZE 512  /* максимальная длина одного сообщения */
 #define MAX_NAME_SIZE 64      /* максимальная длина имени сервера/пользователя */
 #define SUBNET_HOST_COUNT 254 /* сканируем адреса .1 – .254 */
 
-/* ── Структуры ──────────────────────────────────────────────────────── */
-
-/* Информация об одном найденном сервере */
 typedef struct
 {
-  char ip[32];              /* IP-адрес сервера */
-  char name[MAX_NAME_SIZE]; /* имя сервера (как он представился) */
+  char ip[32];
+  char name[MAX_NAME_SIZE];
 } Server;
-
-/* ── Глобальные переменные ──────────────────────────────────────────── */
 
 static Server servers[MAX_SERVERS];    /* список найденных серверов */
 static int server_count;               /* сколько серверов нашли */
@@ -37,89 +30,72 @@ static char username[MAX_NAME_SIZE];   /* имя текущего пользов
 static volatile int is_session_active; /* флаг: идёт ли сеанс чата */
 static int chat_socket;                /* сокет активного соединения с сервером */
 
-/* ══════════════════════════════════════════════════════════════════════
- *  Вспомогательные функции
- * ══════════════════════════════════════════════════════════════════════ */
-
-/*
- * Читает одну строку из сокета посимвольно.
- * Возвращает количество прочитанных байт, или -1 при ошибке.
- */
-static int read_line_from_socket(int socket_fd, char *buffer, int max_size)
+// Читает одну строку из сокета посимвольно.
+static int read_line_from_socket(int fd, char *buff, int max_size)
 {
-  for (int position = 0; position < max_size - 1; position++)
+  for (int i = 0; i < max_size - 1; i++)
   {
     char ch;
-    if (recv(socket_fd, &ch, 1, 0) < 0)
+    if (recv(fd, &ch, 1, 0) < 0)
       return -1;
 
-    buffer[position] = ch;
+    buff[i] = ch;
 
     if (ch == '\n')
     {
-      buffer[position + 1] = '\0';
-      return position + 1;
+      buff[i + 1] = '\0';
+      return i + 1;
     }
   }
 
-  buffer[max_size - 1] = '\0';
+  buff[max_size - 1] = '\0';
   return max_size - 1;
 }
 
-/*
- Убирает символы перевода строки (\n и \r) из конца строки.
- */
+// Обрезает строку до /n
 static void remove_newline(char *str)
 {
   size_t end_index = strcspn(str, "\r\n");
   str[end_index] = '\0';
 }
 
-/*
- * Определяет первые три октета IP-адреса текущей машины
- * (например "192.168.1") и записывает результат в out.
- * Игнорирует loopback-интерфейс (127.x.x.x).
- * Если определить не удалось — использует "192.168.1" по умолчанию.
- */
-static void get_local_subnet(char *out, size_t out_size)
+// возвращает подсеть первого подходящего интерфейса
+static void get_subnet(char *out, size_t size)
 {
-  /* Значение по умолчанию на случай ошибки */
-  strncpy(out, "192.168.1", out_size - 1);
+  strncpy(out, "192.168.1", size - 1);
 
-  /* Получаем список всех сетевых интерфейсов */
-  struct ifaddrs *interface_list;
-  if (getifaddrs(&interface_list) != 0)
+  struct ifaddrs *iface_list; // односвязный список интерфейсов
+  if (getifaddrs(&iface_list) != 0)
     return;
 
-  for (struct ifaddrs *iface = interface_list; iface; iface = iface->ifa_next)
+  for (struct ifaddrs *iface = iface_list; iface; iface = iface->ifa_next)
   {
-    /* Пропускаем интерфейсы без адреса и не-IPv4 */
+    // Интерфейсы без адреса и не-IPv4
     if (!iface->ifa_addr || iface->ifa_addr->sa_family != AF_INET)
       continue;
 
-    /* Пропускаем loopback (lo) */
+    // loopback (lo)
     if (strcmp(iface->ifa_name, "lo") == 0)
       continue;
 
-    /* Получаем IP в виде строки, например "192.168.1.5" */
+    // Получаем IP в виде строки
     struct sockaddr_in *ipv4_addr = (struct sockaddr_in *)iface->ifa_addr;
     char ip_string[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &ipv4_addr->sin_addr, ip_string, sizeof(ip_string));
 
-    /* Отрезаем последний октет: "192.168.1.5" → "192.168.1" */
+    // Отрезаем последний октет
     char *last_dot = strrchr(ip_string, '.');
-    if (last_dot)
-    {
-      size_t prefix_len = (size_t)(last_dot - ip_string);
-      if (prefix_len >= out_size)
-        prefix_len = out_size - 1;
-      strncpy(out, ip_string, prefix_len);
-      out[prefix_len] = '\0';
-    }
+    size_t subnet_len = (size_t)(last_dot - ip_string);
+
+    if (subnet_len >= size)
+      subnet_len = size - 1;
+    strncpy(out, ip_string, subnet_len);
+    out[subnet_len] = '\0';
+
     break; /* берём только первый подходящий интерфейс */
   }
 
-  freeifaddrs(interface_list);
+  freeifaddrs(iface_list);
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -136,7 +112,7 @@ static void get_local_subnet(char *out, size_t out_size)
 static void scan_local_network(void)
 {
   char subnet[12]; /* первые три октета, например "192.168.1" */
-  get_local_subnet(subnet, sizeof(subnet));
+  get_subnet(subnet, sizeof(subnet));
   printf("Сканирование %s.1–%s.254 (порт %d)...\n", subnet, subnet, SERVER_PORT);
   server_count = 0;
 
@@ -266,21 +242,15 @@ static void *receive_messages_thread(void *unused)
       if (is_session_active)
       {
         printf("\n[Соединение с сервером разорвано]\n");
-        fflush(stdout);
         is_session_active = 0;
       }
       break;
     }
     printf("%s", received_line);
-    fflush(stdout);
   }
 
   return NULL;
 }
-
-/* ══════════════════════════════════════════════════════════════════════
- *  Сеанс чата
- * ══════════════════════════════════════════════════════════════════════ */
 
 /*
  * Ведёт диалог с сервером:
@@ -417,15 +387,44 @@ static void login_and_chat(int socket_fd, const char *fallback_name)
   printf("\nОтключён от сервера.\n");
 }
 
-/* ══════════════════════════════════════════════════════════════════════
- *  Точка входа
- * ══════════════════════════════════════════════════════════════════════ */
+void menu_search()
+{
+  scan_local_network();
+  if (!server_count)
+    return;
+
+  printf("Выберите сервер (0 — назад): ");
+
+  char server_selection[8];
+  if (!fgets(server_selection, sizeof(server_selection), stdin))
+    return;
+
+  int selected = atoi(server_selection);
+  if (selected < 1 || selected > server_count)
+    return;
+
+  int socket_fd = connect_to_server(servers[selected - 1].ip);
+  if (socket_fd >= 0)
+    login_and_chat(socket_fd, servers[selected - 1].name);
+}
+
+void menu_manual()
+{
+  printf("IP сервера: ");
+  char server_ip[32];
+  if (!fgets(server_ip, sizeof(server_ip), stdin))
+    return;
+  remove_newline(server_ip);
+
+  int socket_fd = connect_to_server(server_ip);
+  if (socket_fd >= 0)
+    login_and_chat(socket_fd, server_ip);
+}
 
 int main(void)
 {
   printf("=== Чат-клиент ===\n");
 
-  /* Запрашиваем имя пользователя */
   printf("Ваше имя: ");
   if (!fgets(username, sizeof(username), stdin))
     return 1;
@@ -436,52 +435,23 @@ int main(void)
     return 1;
   }
 
-  /* Главное меню */
   while (1)
   {
     printf("\n[1] Найти серверы  [2] Ввести IP вручную  [0] Выход\n> ");
-
     char menu_choice[4];
     if (!fgets(menu_choice, sizeof(menu_choice), stdin))
       break;
 
     if (menu_choice[0] == '0')
       break;
-
-    if (menu_choice[0] == '1')
+    switch (menu_choice[0])
     {
-      /* Сканируем сеть и выводим список найденных серверов */
-      scan_local_network();
-      if (!server_count)
-        continue;
-
-      printf("Выберите сервер (0 — назад): ");
-      fflush(stdout);
-
-      char server_selection[8];
-      if (!fgets(server_selection, sizeof(server_selection), stdin))
-        break;
-
-      int selected_server = atoi(server_selection);
-      if (selected_server < 1 || selected_server > server_count)
-        continue;
-
-      int socket_fd = connect_to_server(servers[selected_server - 1].ip);
-      if (socket_fd >= 0)
-        login_and_chat(socket_fd, servers[selected_server - 1].name);
-    }
-    else if (menu_choice[0] == '2')
-    {
-      /* Подключаемся к серверу по IP, введённому вручную */
-      printf("IP сервера: ");
-      char server_ip[32];
-      if (!fgets(server_ip, sizeof(server_ip), stdin))
-        continue;
-      remove_newline(server_ip);
-
-      int socket_fd = connect_to_server(server_ip);
-      if (socket_fd >= 0)
-        login_and_chat(socket_fd, server_ip);
+    case '1':
+      menu_search();
+      break;
+    case '2':
+      menu_manual();
+      break;
     }
   }
 
