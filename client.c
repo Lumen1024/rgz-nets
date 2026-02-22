@@ -53,10 +53,16 @@ static int read_line_from_socket(int fd, char *buff, int max_size)
 }
 
 // Обрезает строку до /n
-static void remove_newline(char *str)
+static void remove_nl(char *str)
 {
   size_t end_index = strcspn(str, "\r\n");
   str[end_index] = '\0';
+}
+
+static inline void set_socket_blocking(int fd, int blocking)
+{
+  int flags = fcntl(fd, F_GETFL, 0);
+  fcntl(fd, F_SETFL, blocking ? (flags & ~O_NONBLOCK) : (flags | O_NONBLOCK));
 }
 
 // возвращает подсеть первого подходящего интерфейса
@@ -92,51 +98,39 @@ static void get_subnet(char *out, size_t size)
     strncpy(out, ip_string, subnet_len);
     out[subnet_len] = '\0';
 
-    break; /* берём только первый подходящий интерфейс */
+    break;
   }
 
   freeifaddrs(iface_list);
 }
 
-/* ══════════════════════════════════════════════════════════════════════
- *  Сканирование сети
- * ══════════════════════════════════════════════════════════════════════
- *
- * Алгоритм:
- *   1. Открываем 254 неблокирующих сокета и запускаем connect() на всех
- *      сразу (параллельно).
- *   2. Ждём 500 мс — устройства в локальной сети успеют ответить.
- *   3. Тем, кто подключился, отправляем запрос "PROBE\n" и читаем ответ
- *      "SERVER:имя_сервера".
- */
 static void scan_local_network(void)
 {
-  char subnet[12]; /* первые три октета, например "192.168.1" */
+  char subnet[12];
   get_subnet(subnet, sizeof(subnet));
-  printf("Сканирование %s.1–%s.254 (порт %d)...\n", subnet, subnet, SERVER_PORT);
+
+  printf("Сканирование %s (порт %d)\n", subnet, subnet, SERVER_PORT);
   server_count = 0;
 
   int sockets[SUBNET_HOST_COUNT];             /* сокет для каждого хоста */
   char ip_list[SUBNET_HOST_COUNT][20];        /* IP каждого хоста */
   struct pollfd poll_list[SUBNET_HOST_COUNT]; /* список для poll() */
 
-  /* ── Шаг 1: открываем соединения ко всем 254 хостам параллельно ── */
+  // Connect к 254 адресам подсети
   for (int i = 0; i < SUBNET_HOST_COUNT; i++)
   {
+    // Собираем ip
     snprintf(ip_list[i], sizeof(ip_list[i]), "%s.%d", subnet, i + 1);
 
     sockets[i] = socket(AF_INET, SOCK_STREAM, 0);
     if (sockets[i] < 0)
     {
-      poll_list[i].fd = -1; /* сокет не создан, пропускаем */
+      poll_list[i].fd = -1; // не получилось ну и ладно
       continue;
     }
+    set_socket_blocking(sockets[i], 0);
 
-    /* Переводим сокет в неблокирующий режим, чтобы connect() не ждал */
-    int flags = fcntl(sockets[i], F_GETFL, 0);
-    fcntl(sockets[i], F_SETFL, flags | O_NONBLOCK);
-
-    /* Указываем адрес и порт сервера */
+    // Собираем полный адрес сервера
     struct sockaddr_in server_addr = {0};
     server_addr.sin_family = AF_INET;
     server_addr.sin_port = htons(SERVER_PORT);
@@ -148,21 +142,21 @@ static void scan_local_network(void)
       continue;
     }
 
-    /* connect() вернёт EINPROGRESS — это нормально для неблокирующего сокета */
     connect(sockets[i], (struct sockaddr *)&server_addr, sizeof(server_addr));
 
+    // Заполняем структуры poll
     poll_list[i].fd = sockets[i];
-    poll_list[i].events = POLLOUT; /* ждём готовности к записи = соединение установлено */
-    poll_list[i].revents = 0;
+    poll_list[i].events = POLLOUT; // чего мы ждем
+    poll_list[i].revents = 0;      // тут будет результат
   }
 
-  /* ── Шаг 2: ждём 500 мс, пока хосты отвечают ── */
+  // Ждем все 500 мс (или раньше)
   poll(poll_list, SUBNET_HOST_COUNT, 500);
 
-  /* ── Шаг 3: опрашиваем тех, кто ответил ── */
+  // Проверяем кто ответил
   for (int i = 0; i < SUBNET_HOST_COUNT && server_count < MAX_SERVERS; i++)
   {
-    /* Пропускаем сокеты, которые не готовы */
+    // Все кто завершил соединение
     if (sockets[i] < 0 || !(poll_list[i].revents & POLLOUT))
     {
       if (sockets[i] >= 0)
@@ -170,7 +164,7 @@ static void scan_local_network(void)
       continue;
     }
 
-    /* Проверяем, не было ли ошибки при подключении */
+    // Пропускаем у кого ошибка
     int connect_error = 0;
     socklen_t error_size = sizeof(connect_error);
     getsockopt(sockets[i], SOL_SOCKET, SO_ERROR, &connect_error, &error_size);
@@ -180,12 +174,11 @@ static void scan_local_network(void)
       continue;
     }
 
-    /* Возвращаем сокет в блокирующий режим для нормальной отправки/приёма */
-    int flags = fcntl(sockets[i], F_GETFL, 0);
-    fcntl(sockets[i], F_SETFL, flags & ~O_NONBLOCK);
+    set_socket_blocking(sockets[i], 1);
 
-    /* Отправляем запрос "PROBE\n" и ждём ответа не дольше 1 секунды */
-    send(sockets[i], "PROBE\n", 6, 0);
+    // Отправляем "PROBE" и ждём ответа
+    send(sockets[i], "PROBE", 6, 0);
+
     struct pollfd wait_for_response = {sockets[i], POLLIN, 0};
     if (poll(&wait_for_response, 1, 1000) <= 0 || !(wait_for_response.revents & POLLIN))
     {
@@ -193,24 +186,24 @@ static void scan_local_network(void)
       continue;
     }
 
-    /* Читаем ответ сервера */
-    char response[256] = {0};
-    int bytes_received = (int)recv(sockets[i], response, sizeof(response) - 1, 0);
+    // Читаем ответ сервера
+    char buff[256] = {0};
+    int bytes_received = (int)recv(sockets[i], buff, sizeof(buff) - 1, 0);
     close(sockets[i]);
     if (bytes_received <= 0)
       continue;
-    response[bytes_received] = '\0';
+    buff[bytes_received] = '\0';
 
-    /* Ищем "SERVER:" в ответе и извлекаем имя сервера */
-    char *server_name = strstr(response, "SERVER:");
+    // Ищем имя сервера
+    char *server_name = strstr(buff, "SERVER:");
     if (!server_name)
       continue;
-    server_name += 7; /* пропускаем "SERVER:" */
+    server_name += 7;
     char *name_end = strchr(server_name, '\n');
     if (name_end)
       *name_end = '\0';
 
-    /* Сохраняем найденный сервер в список */
+    // Сохраняем сервер в список
     strncpy(servers[server_count].ip, ip_list[i], 31);
     strncpy(servers[server_count].name, server_name, MAX_NAME_SIZE - 1);
     printf("  [%d] %s  (%s)\n", server_count + 1, server_name, ip_list[i]);
@@ -218,17 +211,10 @@ static void scan_local_network(void)
   }
 
   if (!server_count)
-    puts("Серверов не найдено.");
+    printf("Серверов не найдено");
 }
 
-/* ══════════════════════════════════════════════════════════════════════
- *  Поток приёма сообщений
- * ══════════════════════════════════════════════════════════════════════ */
-
-/*
- * Работает в отдельном потоке: читает сообщения от сервера и выводит их.
- * Завершается, когда сервер закрывает соединение или is_session_active = 0.
- */
+// Читает сообщения от сервера и выводит их.
 static void *receive_messages_thread(void *unused)
 {
   (void)unused;
@@ -249,7 +235,7 @@ static void *receive_messages_thread(void *unused)
     printf("%s", received_line);
   }
 
-  return NULL;
+  return;
 }
 
 /*
@@ -270,36 +256,34 @@ static void start_chat_session(int socket_fd, const char *server_name)
   {
     int bytes_read = read_line_from_socket(socket_fd, received_line, sizeof(received_line));
     if (bytes_read <= 0)
-    {
-      puts("[Ошибка получения истории]");
       return;
-    }
+
     if (strncmp(received_line, "END_HISTORY", 11) == 0)
       break;
     printf("%s", received_line);
   }
-  printf("=== Начало чата. /quit — выход в меню ===\n");
-  fflush(stdout);
+  printf("=== Начало чата ===\n");
 
-  /* Запускаем фоновый поток, который будет выводить входящие сообщения */
+  // Поток для входящих сообщений
   pthread_t receiver_thread;
   pthread_create(&receiver_thread, NULL, receive_messages_thread, NULL);
 
   /* Основной цикл: читаем ввод пользователя и отправляем на сервер */
   char user_input[MAX_MESSAGE_SIZE];
-  while (is_session_active && fgets(user_input, sizeof(user_input), stdin))
+  while (is_session_active)
   {
-    remove_newline(user_input);
+    fgets(user_input, sizeof(user_input), stdin);
+    remove_nl(user_input);
 
     if (!is_session_active)
       break;
-    if (!*user_input) /* пустая строка — не отправляем */
+    if (!*user_input) // пустая строка
       continue;
 
     /* Добавляем \n в конец и отправляем */
-    char message_to_send[MAX_MESSAGE_SIZE + 2];
-    snprintf(message_to_send, sizeof(message_to_send), "%s\n", user_input);
-    if (send(socket_fd, message_to_send, strlen(message_to_send), 0) < 0)
+    char message[MAX_MESSAGE_SIZE + 2];
+    snprintf(message, sizeof(message), "%s\n", user_input);
+    if (send(socket_fd, message, strlen(message), 0) < 0)
       break;
 
     if (strcmp(user_input, "/quit") == 0)
@@ -309,20 +293,12 @@ static void start_chat_session(int socket_fd, const char *server_name)
     }
   }
 
-  /* Завершаем сеанс: закрываем соединение и ждём фоновый поток */
   is_session_active = 0;
-  shutdown(socket_fd, SHUT_RDWR); /* прерывает чтение в фоновом потоке */
+  shutdown(socket_fd, SHUT_RDWR); // прерывает чтение в фоновом потоке
   pthread_join(receiver_thread, NULL);
 }
 
-/* ══════════════════════════════════════════════════════════════════════
- *  Подключение к серверу
- * ══════════════════════════════════════════════════════════════════════ */
-
-/*
- * Создаёт TCP-соединение с сервером по IP-адресу.
- * Возвращает файловый дескриптор сокета, или -1 при ошибке.
- */
+// Создаёт TCP-соединение с сервером
 static int connect_to_server(const char *ip_address)
 {
   int new_socket = socket(AF_INET, SOCK_STREAM, 0);
@@ -335,10 +311,9 @@ static int connect_to_server(const char *ip_address)
   struct sockaddr_in server_addr = {0};
   server_addr.sin_family = AF_INET;
   server_addr.sin_port = htons(SERVER_PORT);
-
   if (inet_pton(AF_INET, ip_address, &server_addr.sin_addr) != 1)
   {
-    puts("Неверный IP-адрес.");
+    printf("Неверный IP-адрес.");
     close(new_socket);
     return -1;
   }
@@ -353,20 +328,14 @@ static int connect_to_server(const char *ip_address)
   return new_socket;
 }
 
-/*
- * После установки соединения:
- *   1. Отправляет имя пользователя.
- *   2. Читает строку "SERVER:имя" от сервера.
- *   3. Запускает сеанс чата.
- */
 static void login_and_chat(int socket_fd, const char *fallback_name)
 {
-  /* Отправляем своё имя серверу */
+  // Отправляем имя клиента
   char login_message[MAX_NAME_SIZE + 2];
   snprintf(login_message, sizeof(login_message), "%s\n", username);
   send(socket_fd, login_message, strlen(login_message), 0);
 
-  /* Читаем строку "SERVER:имя" и запоминаем имя для отображения */
+  // Читаем строку "SERVER:имя"
   char server_response[MAX_MESSAGE_SIZE];
   char server_display_name[MAX_NAME_SIZE];
   strncpy(server_display_name, fallback_name, MAX_NAME_SIZE - 1);
@@ -376,8 +345,8 @@ static void login_and_chat(int socket_fd, const char *fallback_name)
     char *name_start = strstr(server_response, "SERVER:");
     if (name_start)
     {
-      name_start += 7; /* пропускаем "SERVER:" */
-      remove_newline(name_start);
+      name_start += 7;
+      remove_nl(name_start);
       strncpy(server_display_name, name_start, MAX_NAME_SIZE - 1);
     }
   }
@@ -414,7 +383,7 @@ void menu_manual()
   char server_ip[32];
   if (!fgets(server_ip, sizeof(server_ip), stdin))
     return;
-  remove_newline(server_ip);
+  remove_nl(server_ip);
 
   int socket_fd = connect_to_server(server_ip);
   if (socket_fd >= 0)
@@ -428,7 +397,7 @@ int main(void)
   printf("Ваше имя: ");
   if (!fgets(username, sizeof(username), stdin))
     return 1;
-  remove_newline(username);
+  remove_nl(username);
   if (!*username)
   {
     printf("Имя не может быть пустым.\n");
