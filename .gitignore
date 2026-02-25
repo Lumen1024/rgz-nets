@@ -2,3 +2,4 @@ chat_client
 chat_server
 *.txt
 README.md
+.vscode
