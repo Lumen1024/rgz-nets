@@ -5,29 +5,29 @@
 #include <vars.h>
 #include <scanner.h>
 #include <session.h>
+#include <ui.h>
 
 static char username[NAME_LEN];
 
 static void menu_search()
 {
     ServerInfo servers[MAX_SERVERS];
-    int count = scan_local_network(servers, MAX_SERVERS);
+    int count = get_servers(servers);
     if (!count)
     {
         printf("Серверов не найдено.\n");
         return;
     }
 
-    printf("Выберите сервер (0 — назад): ");
-    char buf[8];
-    if (!fgets(buf, sizeof(buf), stdin))
+    for (int i = 0; i < count; i++)
+        printf("[%d] %s (%s)", i, servers[i].name, servers[i].ip);
+
+    printf("\n\nВыберите сервер (0 — назад): ");
+    int choice;
+    if (getchoice(&choice, count))
         return;
 
-    int sel = atoi(buf);
-    if (sel < 1 || sel > count)
-        return;
-
-    session_run(servers[sel - 1].ip, servers[sel - 1].name, username);
+    run_session(servers[choice].ip, username);
 }
 
 static void menu_manual()
@@ -38,37 +38,30 @@ static void menu_manual()
         return;
     ip[strcspn(ip, "\r\n")] = '\0';
 
-    session_run(ip, ip, username);
+    run_session(ip, username);
 }
 
 int main(void)
 {
     printf("=== Чат-клиент ===\n");
-
     printf("Ваше имя: ");
-    if (!fgets(username, sizeof(username), stdin))
+    if (getusername(username) != 0)
         return 1;
-    username[strcspn(username, "\r\n")] = '\0';
-    if (!*username)
-    {
-        printf("Имя не может быть пустым.\n");
-        return 1;
-    }
 
     while (1)
     {
         printf("\n[1] Найти серверы  [2] Ввести IP вручную  [0] Выход\n> ");
-        char choice[4];
-        if (!fgets(choice, sizeof(choice), stdin))
-            break;
-        switch (choice[0])
+        int choice;
+        getchoice(&choice, 3);
+
+        switch (choice)
         {
-        case '0':
+        case 0:
             return 0;
-        case '1':
+        case 1:
             menu_search();
             break;
-        case '2':
+        case 2:
             menu_manual();
             break;
         }
