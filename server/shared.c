@@ -4,12 +4,18 @@
 
 Shared *shared_init(void)
 {
-    Shared *sh = mmap(NULL, sizeof(Shared),
-                      PROT_READ | PROT_WRITE,
-                      MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (sh == MAP_FAILED)
-        return NULL;
-    sem_init(&sh->mutex, /*pshared=*/1, 1);
+    // общая память для клиентских процессов
+    Shared *sh = mmap(
+        NULL,                   /* адрес: ядро само выберет подходящий адрес */
+        sizeof(Shared),         /* размер: сколько байт выделить             */
+        PROT_READ | PROT_WRITE, /* права: можно читать и записывать      */
+        MAP_SHARED              /* изменения видны всем процессам (fork)     */
+            | MAP_ANONYMOUS,    /* не привязана к файлу, только в RAM        */
+        -1,                     /* fd: -1 обязателен для MAP_ANONYMOUS       */
+        0                       /* offset: смещение в файле, для анон. = 0   */
+    );
+
+    sem_init(&sh->mutex, 1, 1);
     sh->total = 0;
     return sh;
 }

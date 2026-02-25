@@ -1,4 +1,5 @@
 #include <history.h>
+#include <arpa/inet.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,6 @@
 #include <utils.h>
 #include <handler.h>
 
-/* Форматирует сообщение пользователя */
 static void fmt_msg(const char *name, const char *text, char *out, size_t max)
 {
     time_t t = time(NULL);
@@ -22,7 +22,6 @@ static void fmt_msg(const char *name, const char *text, char *out, size_t max)
     snprintf(out, max, "[%s] %s: %s", ts, name, text);
 }
 
-/* Форматирует системное событие */
 static void fmt_event(const char *name, const char *ev, char *out, size_t max)
 {
     time_t t = time(NULL);
@@ -36,12 +35,22 @@ static void publish(Shared *sh, const char *msg)
     hist_append(msg);
     shared_broadcast(sh, msg);
 }
-
+static void get_client_ip(int fd, char *buf, size_t size)
+{
+    struct sockaddr_in addr;
+    socklen_t len = sizeof(addr);
+    if (getpeername(fd, (struct sockaddr *)&addr, &len) == 0)
+        inet_ntop(AF_INET, &addr.sin_addr, buf, size);
+    else
+        strncpy(buf, "unknown", size - 1);
+}
 void handle_client(ClientCtx ctx)
 {
     int fd = ctx.fd;
     Shared *sh = ctx.sh;
     char name[NAME_LEN];
+    char client_ip[INET_ADDRSTRLEN];
+    get_client_ip(fd, client_ip, sizeof(client_ip));
 
     if (net_readline(fd, name, sizeof(name)) <= 0)
     {
@@ -54,20 +63,19 @@ void handle_client(ClientCtx ctx)
     snprintf(resp, sizeof(resp), "SERVER:%s\n", ctx.srv_name);
     send(fd, resp, strlen(resp), MSG_NOSIGNAL);
 
-    /* Зондирование */
+    // если подключился сканер то закрываем соединение
     if (strcmp(name, "PROBE") == 0)
     {
         close(fd);
         exit(0);
     }
-
-    /* История */
+    printf("[+] %s (%s) подключился\n", name, client_ip);
+    fflush(stdout);
     hist_send_to(fd);
-    send(fd, "END_HISTORY\n", 12, MSG_NOSIGNAL);
 
     int last = sh->total;
+    char msg[FMT_MSG_LEN];
 
-    char msg[MSG_LEN];
     fmt_event(name, "вошёл в чат", msg, sizeof(msg));
     publish(sh, msg);
 
@@ -80,12 +88,9 @@ void handle_client(ClientCtx ctx)
         int ret = select(fd + 1, &r, NULL, NULL, &tv);
         if (ret < 0)
         {
-            if (errno == EINTR)
-                continue;
             break;
         }
-
-        /* Рассылаем новые сообщения */
+        // рассылаем новые сообщения (broadcast)
         sem_wait(&sh->mutex);
         int cur = sh->total;
         sem_post(&sh->mutex);
@@ -94,6 +99,8 @@ void handle_client(ClientCtx ctx)
         {
             char m[MSG_LEN];
             sem_wait(&sh->mutex);
+            // копируем из shared сюда, чтобы не держать семафор слишком долго.
+            // иначе у нас бы блокировались остальные клиенты во время send
             strncpy(m, sh->msgs[last % MAX_MSGS], MSG_LEN - 1);
             sem_post(&sh->mutex);
             send(fd, m, strlen(m), MSG_NOSIGNAL);
@@ -101,7 +108,7 @@ void handle_client(ClientCtx ctx)
             last++;
         }
 
-        /* Читаем сообщение клиента */
+        // читаем сообщение клиента
         if (ret > 0 && FD_ISSET(fd, &r))
         {
             char buf[MSG_LEN];
@@ -109,14 +116,15 @@ void handle_client(ClientCtx ctx)
             if (n <= 0)
                 break;
             strip_nl(buf);
-            if (!*buf || strcmp(buf, "/quit") == 0)
+            if (!*buf || (n <= 0) || strcmp(buf, "/quit") == 0)
                 break;
 
             fmt_msg(name, buf, msg, sizeof(msg));
             publish(sh, msg);
         }
     }
-
+    printf("[-] %s (%s) отключился\n", name, client_ip);
+    fflush(stdout);
     fmt_event(name, "покинул чат", msg, sizeof(msg));
     publish(sh, msg);
     close(fd);
