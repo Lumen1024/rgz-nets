@@ -26,10 +26,12 @@ void hist_append(const char *msg)
 void hist_send_to(int fd)
 {
     FILE *f = fopen(hist_path, "r");
-    if (!f)
-        return;
-    char line[MSG_LEN];
-    while (fgets(line, sizeof(line), f))
-        send(fd, line, strlen(line), MSG_NOSIGNAL);
-    fclose(f);
+    if (f)
+    {
+        char line[MSG_LEN];
+        while (fgets(line, sizeof(line), f))
+            send(fd, line, strlen(line), MSG_NOSIGNAL);
+        fclose(f);
+    }
+    send(fd, "END_HISTORY\n", 12, MSG_NOSIGNAL);
 }
