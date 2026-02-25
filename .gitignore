@@ -3,3 +3,4 @@ chat_server
 *.txt
 README.md
 .vscode
+bin

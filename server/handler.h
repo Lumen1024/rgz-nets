@@ -1,11 +1,12 @@
 #pragma once
-#include "shared.h"
+#include <shared.h>
 
 /* Контекст, который main передаёт дочернему процессу. */
-typedef struct {
-    int     fd;
+typedef struct
+{
+    int fd;
     Shared *sh;
-    char    srv_name[NAME_LEN];
+    char srv_name[NAME_LEN];
 } ClientCtx;
 
 /* Вызывается в дочернем процессе. Внутри — exit(). */

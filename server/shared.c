@@ -1,4 +1,4 @@
-#include "shared.h"
+#include <shared.h>
 #include <sys/mman.h>
 #include <string.h>
 
@@ -7,7 +7,8 @@ Shared *shared_init(void)
     Shared *sh = mmap(NULL, sizeof(Shared),
                       PROT_READ | PROT_WRITE,
                       MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-    if (sh == MAP_FAILED) return NULL;
+    if (sh == MAP_FAILED)
+        return NULL;
     sem_init(&sh->mutex, /*pshared=*/1, 1);
     sh->total = 0;
     return sh;

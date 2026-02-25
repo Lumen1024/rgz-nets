@@ -1,17 +1,14 @@
-CC     = gcc
-CFLAGS = -Wall -Wextra -O2 -pthread
-
-COMMON  = common/net_utils.c
-SRV_SRC = server/main.c server/shared.c server/history.c server/handler.c $(COMMON)
-CLI_SRC = client/main.c client/scanner.c client/session.c $(COMMON)
+.PHONY: all server client clean
 
 all: server client
 
-server: $(SRV_SRC)
-	$(CC) $(CFLAGS) -o chat_server $^
+server:
+	$(MAKE) -C server
 
-client: $(CLI_SRC)
-	$(CC) $(CFLAGS) -o chat_client $^
+client:
+	$(MAKE) -C client
 
 clean:
-	rm -f chat_server chat_client
+	$(MAKE) -C server clean
+	$(MAKE) -C client clean
+	@rmdir bin 2>/dev/null || true

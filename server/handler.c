@@ -1,7 +1,5 @@
-#include "handler.h"
-#include "history.h"
-#include "../common/net_utils.h"
-#include "../common/protocol.h"
+#include <history.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,6 +8,10 @@
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
+
+#include <vars.h>
+#include <utils.h>
+#include <handler.h>
 
 /* Форматирует сообщение пользователя */
 static void fmt_msg(const char *name, const char *text, char *out, size_t max)
@@ -41,15 +43,23 @@ void handle_client(ClientCtx ctx)
     Shared *sh = ctx.sh;
     char name[NAME_LEN];
 
-    if (net_readline(fd, name, sizeof(name)) <= 0) { close(fd); exit(0); }
-    net_strip_nl(name);
+    if (net_readline(fd, name, sizeof(name)) <= 0)
+    {
+        close(fd);
+        exit(0);
+    }
+    strip_nl(name);
 
     char resp[NAME_LEN + 16];
     snprintf(resp, sizeof(resp), "SERVER:%s\n", ctx.srv_name);
     send(fd, resp, strlen(resp), MSG_NOSIGNAL);
 
     /* Зондирование */
-    if (strcmp(name, "PROBE") == 0) { close(fd); exit(0); }
+    if (strcmp(name, "PROBE") == 0)
+    {
+        close(fd);
+        exit(0);
+    }
 
     /* История */
     hist_send_to(fd);
@@ -61,18 +71,27 @@ void handle_client(ClientCtx ctx)
     fmt_event(name, "вошёл в чат", msg, sizeof(msg));
     publish(sh, msg);
 
-    while (1) {
-        fd_set r; FD_ZERO(&r); FD_SET(fd, &r);
+    while (1)
+    {
+        fd_set r;
+        FD_ZERO(&r);
+        FD_SET(fd, &r);
         struct timeval tv = {0, 100000};
         int ret = select(fd + 1, &r, NULL, NULL, &tv);
-        if (ret < 0) { if (errno == EINTR) continue; break; }
+        if (ret < 0)
+        {
+            if (errno == EINTR)
+                continue;
+            break;
+        }
 
         /* Рассылаем новые сообщения */
         sem_wait(&sh->mutex);
         int cur = sh->total;
         sem_post(&sh->mutex);
 
-        while (last < cur) {
+        while (last < cur)
+        {
             char m[MSG_LEN];
             sem_wait(&sh->mutex);
             strncpy(m, sh->msgs[last % MAX_MSGS], MSG_LEN - 1);
@@ -83,12 +102,15 @@ void handle_client(ClientCtx ctx)
         }
 
         /* Читаем сообщение клиента */
-        if (ret > 0 && FD_ISSET(fd, &r)) {
+        if (ret > 0 && FD_ISSET(fd, &r))
+        {
             char buf[MSG_LEN];
             int n = net_readline(fd, buf, sizeof(buf));
-            if (n <= 0) break;
-            net_strip_nl(buf);
-            if (!*buf || strcmp(buf, "/quit") == 0) break;
+            if (n <= 0)
+                break;
+            strip_nl(buf);
+            if (!*buf || strcmp(buf, "/quit") == 0)
+                break;
 
             fmt_msg(name, buf, msg, sizeof(msg));
             publish(sh, msg);
