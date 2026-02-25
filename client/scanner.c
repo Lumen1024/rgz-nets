@@ -25,25 +25,6 @@ static int is_local_iface(struct ifaddrs *iface)
     return 1;
 }
 
-// получает первую локальную подсеть
-static int get_subnet(char *subnet)
-{
-    struct ifaddrs *list;
-    if (getifaddrs(&list) != 0)
-        return;
-
-    for (struct ifaddrs *iface = list; iface; iface = iface->ifa_next)
-    {
-        if (!is_local_iface(iface))
-            continue;
-
-        get_subnet_from_iface(iface, subnet);
-        break;
-    }
-
-    freeifaddrs(list);
-    return 0;
-}
 
 // сканирует подсеть на наличие серверов
 static int scan_subnet(char *subnet, ServerInfo *servers, int max_count)
@@ -88,7 +69,7 @@ static int scan_subnet(char *subnet, ServerInfo *servers, int max_count)
     int count = 0;
     for (int i = 0; i < SUBNET_HOST_COUNT; i++)
     {
-        if (fds[i] < 1)
+        if (fds[i] < 0)
         {
             close(fds[i]);
             continue;
@@ -106,7 +87,7 @@ static int scan_subnet(char *subnet, ServerInfo *servers, int max_count)
         }
 
         set_socket_blocking(fds[i], 1);
-        send(fds[i], "PROBE", 5, 0);
+        send(fds[i], "PROBE\n", 6, 0);
 
         struct pollfd wait = {fds[i], POLLIN, 0};
         if (poll(&wait, 1, 1000) <= 0 || !(wait.revents & POLLIN))
@@ -131,9 +112,10 @@ static int scan_subnet(char *subnet, ServerInfo *servers, int max_count)
         if (end)
             *end = '\0';
 
-        strncpy(servers[count].ip, ips[i], sizeof(servers[count].ip) - 1);
+        memcpy(servers[count].ip, ips[i], sizeof(ips[i]));
         strncpy(servers[count].name, p, NAME_LEN - 1);
-        count++;
+        if (count < max_count)
+            count++;
     }
 
     return count;
@@ -141,7 +123,21 @@ static int scan_subnet(char *subnet, ServerInfo *servers, int max_count)
 
 int get_servers(ServerInfo *servers)
 {
-    char *subnet[INET_ADDRSTRLEN];
-    get_subnet(subnet);
-    return scan_subnet(subnet, servers, 10);
+    struct ifaddrs *list;
+    if (getifaddrs(&list) != 0)
+        return 0;
+
+    int total = 0;
+    for (struct ifaddrs *iface = list; iface && total < MAX_SERVERS; iface = iface->ifa_next)
+    {
+        if (!is_local_iface(iface))
+            continue;
+
+        char subnet[INET_ADDRSTRLEN];
+        get_subnet_from_iface(iface, subnet);
+        total += scan_subnet(subnet, servers + total, MAX_SERVERS - total);
+    }
+
+    freeifaddrs(list);
+    return total;
 }

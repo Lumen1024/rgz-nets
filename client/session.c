@@ -8,15 +8,16 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <stdatomic.h>
 
 #include <vars.h>
 #include <utils.h>
 
-static volatile int is_active;
+static atomic_int is_active;
 static int chat_fd;
 
-/* Фоновый поток: читает входящие сообщения и печатает их */
-static void *recv_thread(void *unused)
+// Фоновый поток: читает входящие сообщения и печатает их
+static void *rececive_messages_thread(void *unused)
 {
     (void)unused;
     char line[MSG_LEN];
@@ -33,17 +34,15 @@ static void *recv_thread(void *unused)
         printf("%s", line);
         fflush(stdout);
     }
-    return NULL; /* ← исправлен баг: было return; */
+    return NULL;
 }
 
-/* Читает историю, запускает фоновый поток, обрабатывает ввод */
-static void chat_loop(int fd, const char *srv_name)
+static void chat_loop(int fd)
 {
     chat_fd = fd;
     is_active = 1;
 
-    /* Читаем историю до маркера END_HISTORY */
-    printf("\n=== История чата «%s» ===\n", srv_name);
+    // История до END_HISTORY
     char line[MSG_LEN];
     while (1)
     {
@@ -54,13 +53,11 @@ static void chat_loop(int fd, const char *srv_name)
             break;
         printf("%s", line);
     }
-    printf("=== Начало чата ===\n");
-    printf("(введите /quit для выхода)\n\n");
 
     pthread_t tid;
-    pthread_create(&tid, NULL, recv_thread, NULL);
+    pthread_create(&tid, NULL, rececive_messages_thread, NULL);
 
-    /* Цикл отправки сообщений */
+    // Цикл отправки сообщений
     char input[MSG_LEN];
     while (is_active)
     {
@@ -84,66 +81,36 @@ static void chat_loop(int fd, const char *srv_name)
     }
 
     is_active = 0;
-    shutdown(fd, SHUT_RDWR); /* прерывает recv в фоновом потоке */
+
+    shutdown(fd, SHUT_RDWR); // чтобы recv не ждал
     pthread_join(tid, NULL);
 }
 
-/* Создаёт TCP-соединение. Возвращает fd или -1. */
-static int make_connection(const char *ip)
+int run_session(const char *ip, const char *username)
 {
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    int fd = create_tcp_connection(ip, PORT);
     if (fd < 0)
-    {
-        perror("socket");
         return -1;
-    }
 
-    struct sockaddr_in addr = {0};
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(PORT);
-    if (inet_pton(AF_INET, ip, &addr.sin_addr) != 1)
-    {
-        printf("Неверный IP-адрес: %s\n", ip);
-        close(fd);
-        return -1;
-    }
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
-        perror("connect");
-        close(fd);
-        return -1;
-    }
-    return fd;
-}
-
-void session_run(const char *ip, const char *fallback_name, const char *username)
-{
-    int fd = make_connection(ip);
-    if (fd < 0)
-        return;
-
-    /* Отправляем имя пользователя */
+    // Отправляем имя пользователя
     char login[NAME_LEN + 2];
     snprintf(login, sizeof(login), "%s\n", username);
     send(fd, login, strlen(login), MSG_NOSIGNAL);
 
-    /* Читаем имя сервера из ответа "SERVER:имя\n" */
-    char srv_name[NAME_LEN];
-    strncpy(srv_name, fallback_name, NAME_LEN - 1);
-
+    char server_name[NAME_LEN];
     char resp[MSG_LEN];
     if (net_readline(fd, resp, sizeof(resp)) > 0)
     {
         char *p = strstr(resp, "SERVER:");
-        if (p)
-        {
-            p += 7;
-            strip_nl(p);
-            strncpy(srv_name, p, NAME_LEN - 1);
-        }
+        if (!p)
+            return -1;
+        p += 7;
+        strip_nl(p);
+        strncpy(server_name, p, NAME_LEN - 1);
     }
 
-    chat_loop(fd, srv_name);
+    chat_loop(fd);
     close(fd);
     printf("\nОтключён от сервера.\n");
+    return 0;
 }

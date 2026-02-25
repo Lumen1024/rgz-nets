@@ -5,7 +5,7 @@ IFLAGS  = -I../common -I.
 BINDIR  = ../bin
 OBJDIR  = $(BINDIR)/client
 
-SRCS    = main.c scanner.c session.c
+SRCS    = main.c scanner.c session.c ui.c
 OBJS    = $(SRCS:%.c=$(OBJDIR)/%.o) $(OBJDIR)/utils.o
 TARGET  = $(BINDIR)/chat_client
 
