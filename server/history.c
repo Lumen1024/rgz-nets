@@ -1,8 +1,10 @@
-#include "history.h"
-#include "../common/protocol.h"
+#include <history.h>
+
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+
+#include <vars.h>
 
 static char hist_path[256];
 
@@ -14,7 +16,8 @@ void hist_init(const char *path)
 void hist_append(const char *msg)
 {
     FILE *f = fopen(hist_path, "a");
-    if (!f) return;
+    if (!f)
+        return;
     fputs(msg, f);
     fputc('\n', f);
     fclose(f);
@@ -23,7 +26,8 @@ void hist_append(const char *msg)
 void hist_send_to(int fd)
 {
     FILE *f = fopen(hist_path, "r");
-    if (!f) return;
+    if (!f)
+        return;
     char line[MSG_LEN];
     while (fgets(line, sizeof(line), f))
         send(fd, line, strlen(line), MSG_NOSIGNAL);

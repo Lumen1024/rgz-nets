@@ -1,11 +1,13 @@
 #pragma once
-#include "../common/protocol.h"
 
-typedef struct {
+#include <vars.h>
+
+typedef struct ServerInfo
+{
     char ip[32];
     char name[NAME_LEN];
-} ServerEntry;
+} ServerInfo;
 
 /* Сканирует локальную сеть, заполняет массив out.
    Возвращает количество найденных серверов. */
-int scan_local_network(ServerEntry *out, int max_count);
+int scan_local_network(ServerInfo *out, int max_count);
