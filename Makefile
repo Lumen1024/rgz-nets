@@ -1,16 +1,17 @@
-CC      = gcc
-CFLAGS  = -Wall -Wextra -std=gnu11 -g
-LDFLAGS = -pthread
+CC     = gcc
+CFLAGS = -Wall -Wextra -O2 -pthread
+
+COMMON  = common/net_utils.c
+SRV_SRC = server/main.c server/shared.c server/history.c server/handler.c $(COMMON)
+CLI_SRC = client/main.c client/scanner.c client/session.c $(COMMON)
 
 all: server client
 
-server: server.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+server: $(SRV_SRC)
+	$(CC) $(CFLAGS) -o chat_server $^
 
-client: client.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
+client: $(CLI_SRC)
+	$(CC) $(CFLAGS) -o chat_client $^
 
 clean:
-	rm -f server client chat_*.txt
-
-.PHONY: all clean
+	rm -f chat_server chat_client
