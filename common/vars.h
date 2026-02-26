@@ -1,7 +1,7 @@
 #pragma once
 
 #define PORT 8888
-#define BACKLOG 16
+#define BACKLOG 128
 #define MAX_MSGS 1000
 #define MSG_LEN 512
 #define NAME_LEN 64
