@@ -1,47 +1,47 @@
-#include "auth_handler.h"
+#include <auth_handler.h>
 
 #include <stdlib.h>
 #include <string.h>
-#include "cJSON.h"
-#include "../../shared/protocol.h"
-#include "../../shared/response.h"
-#include "../../shared/auth.h"
-#include "../repositories/user_repository.h"
-#include "../repositories/chat_repository.h"
+#include <cJSON.h>
+#include <protocol.h>
+#include <response.h>
+#include <auth.h>
+#include <user_repository.h>
+#include <chat_repository.h>
 
 Response handle_register(Request *req) {
     if (!req->content) {
-        return make_error(1);
+        return make_error(ERR_BAD_REQUEST);
     }
 
     cJSON *login_j = cJSON_GetObjectItem(req->content, "login");
     cJSON *pass_j = cJSON_GetObjectItem(req->content, "password");
 
     if (!cJSON_IsString(login_j) || !cJSON_IsString(pass_j)) {
-        return make_error(1);
+        return make_error(ERR_BAD_REQUEST);
     }
 
     const char *login = login_j->valuestring;
     const char *password = pass_j->valuestring;
 
     if (strlen(login) == 0 || strlen(password) == 0) {
-        return make_error(1);
+        return make_error(ERR_BAD_REQUEST);
     }
 
     if (repo_user_exists(login)) {
-        return make_error(5);
+        return make_error(ERR_CONFLICT);
     }
 
     char *hashed = hash_password(password);
     if (!hashed) {
-        return make_error(1);
+        return make_error(ERR_INTERNAL);
     }
 
     int rc = repo_user_create(login, hashed);
     free(hashed);
 
     if (rc != 0) {
-        return make_error(1);
+        return make_error(ERR_INTERNAL);
     }
 
     return make_success(NULL);
@@ -49,35 +49,35 @@ Response handle_register(Request *req) {
 
 Response handle_login(Request *req) {
     if (!req->content) {
-        return make_error(1);
+        return make_error(ERR_BAD_REQUEST);
     }
 
     cJSON *login_j = cJSON_GetObjectItem(req->content, "login");
     cJSON *pass_j = cJSON_GetObjectItem(req->content, "password");
 
     if (!cJSON_IsString(login_j) || !cJSON_IsString(pass_j)) {
-        return make_error(1);
+        return make_error(ERR_BAD_REQUEST);
     }
 
     const char *login = login_j->valuestring;
     const char *password = pass_j->valuestring;
 
     if (!repo_user_exists(login)) {
-        return make_error(2);
+        return make_error(ERR_NOT_FOUND);
     }
 
     char hash_out[256];
     if (repo_user_get_hash(login, hash_out) != 0) {
-        return make_error(1);
+        return make_error(ERR_INTERNAL);
     }
 
     if (!verify_password(password, hash_out)) {
-        return make_error(3);
+        return make_error(ERR_UNAUTHORIZED);
     }
 
     char *token = generate_token(login);
     if (!token) {
-        return make_error(1);
+        return make_error(ERR_INTERNAL);
     }
 
     cJSON *body = cJSON_CreateObject();

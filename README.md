@@ -18,6 +18,7 @@
 **Стиль кода**
 - Защита заголовочных файлов — `#pragma once`
 - Комментарии — только `//`, не `/* */`
+- Все заголовки через `<>` (пути прописаны в Makefile через `-I`)
 
 ---
 
@@ -180,7 +181,7 @@ typedef struct { ... } Notification;
 - `Response make_error(int code)` — создаёт ответ-ошибку без тела
 - `Response make_success(cJSON *content)` — создаёт успешный ответ с телом
 
-### `shared/notifications.h` / `notifications.c`
+### `shared/notification.h` / `notification.c`
 
 - `int send_notification(int socket_fd, Notification notification)` — отправляет уведомление
 - `int parse_notification(char *data, Notification *notification)` — десериализует уведомление
@@ -247,17 +248,17 @@ typedef struct { ... } Notification;
 - `int repo_user_exists(const char *login)` — проверить существование пользователя
 - `int repo_user_create(const char *login, const char *password_hash)` — создать пользователя
 - `int repo_user_get_hash(const char *login, char *hash_out)` — получить хеш пароля
-- `int repo_user_list(char ***logins_out)` — список всех логинов
+- `int repo_user_list(char ***logins_out, int *count)` — список всех логинов
 
 ### `server/repositories/chat_repository.h` / `chat_repository.c`
 
 - `int repo_chat_create(const char *name, const char *creator)` — создать чат
 - `int repo_chat_delete(const char *name)` — удалить чат
 - `int repo_chat_get_host(const char *name, char *host_out)` — получить создателя
-- `int repo_chat_list_for_user(const char *login, char ***names_out)` — чаты пользователя
+- `int repo_chat_list_for_user(const char *login, char ***names_out, int *count)` — чаты пользователя
 - `int repo_chat_add_user(const char *chat, const char *login)` — добавить участника
 - `int repo_chat_remove_user(const char *chat, const char *login)` — удалить участника
-- `int repo_chat_list_users(const char *chat, char ***logins_out)` — список участников
+- `int repo_chat_list_users(const char *chat, char ***logins_out, int *count)` — список участников
 
 ### `server/repositories/message_repository.h` / `message_repository.c`
 

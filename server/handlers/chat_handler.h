@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../shared/protocol.h"
+#include <protocol.h>
 
 Response handle_get_chats(const char *login);
 Response handle_create_chat(Request *req, const char *login);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../shared/protocol.h"
+#include <protocol.h>
 
 Response handle_file_request(const char *to, Request *req, const char *from);
 Response handle_file_approve(const char *to, const char *file_id);

@@ -1,5 +1,5 @@
-#include "notification.h"
-#include "socket_utils.h"
+#include <notification.h>
+#include <socket_utils.h>
 
 #include <stdlib.h>
 #include <string.h>

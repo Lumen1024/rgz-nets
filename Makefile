@@ -29,7 +29,7 @@ CLIENT_OBJS = $(CLIENT_SRCS:.c=.o)
 CLIENT_BIN  = $(BIN_DIR)/client
 
 # Include paths
-INCLUDES = -I$(LIB_DIR) -I$(SHARED_DIR)
+INCLUDES = -I$(LIB_DIR) -I$(SHARED_DIR) -I$(SERVER_DIR) -I$(SERVER_DIR)/handlers -I$(SERVER_DIR)/repositories -I$(CLIENT_DIR)
 
 .PHONY: all clean shared server client dirs
 

@@ -1,13 +1,13 @@
-#include "file_handler.h"
+#include <file_handler.h>
 
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
-#include "cJSON.h"
-#include "../../shared/protocol.h"
-#include "../../shared/response.h"
-#include "../repositories/user_repository.h"
+#include <cJSON.h>
+#include <protocol.h>
+#include <response.h>
+#include <user_repository.h>
 
 // Simple in-memory file transfer tracking
 #define MAX_FILE_TRANSFERS 256

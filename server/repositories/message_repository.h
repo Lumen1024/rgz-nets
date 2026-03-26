@@ -1,6 +1,6 @@
 #pragma once
 
-#include "shared/protocol.h"
+#include <protocol.h>
 
 int repo_msg_save_chat(const char *chat, const char *login, const char *text);
 int repo_msg_get_chat(const char *chat, Message **msgs_out, int *count);

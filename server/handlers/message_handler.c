@@ -1,13 +1,13 @@
-#include "message_handler.h"
+#include <message_handler.h>
 
 #include <stdlib.h>
 #include <string.h>
-#include "cJSON.h"
-#include "../../shared/protocol.h"
-#include "../../shared/response.h"
-#include "../repositories/message_repository.h"
-#include "../repositories/chat_repository.h"
-#include "../repositories/user_repository.h"
+#include <cJSON.h>
+#include <protocol.h>
+#include <response.h>
+#include <message_repository.h>
+#include <chat_repository.h>
+#include <user_repository.h>
 
 Response handle_get_chat_messages(const char *chat) {
     if (!repo_chat_exists(chat)) {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../../shared/protocol.h"
+#include <protocol.h>
 
 Response handle_register(Request *req);
 Response handle_login(Request *req);
