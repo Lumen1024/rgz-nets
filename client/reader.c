@@ -16,7 +16,13 @@ void *reader_thread(void *arg) {
 
     char buffer[MSG_BUFFER_SIZE];
 
+    fprintf(stderr, "[debug] reader_thread started, fd=%d\n", fd);
+    fflush(stderr);
+
     while (read_message(fd, buffer, sizeof(buffer)) == 0) {
+        fprintf(stderr, "[debug] reader got: %.80s\n", buffer);
+        fflush(stderr);
+
         // Peek at "kind" field to route the message
         cJSON *json = cJSON_Parse(buffer);
         if (!json) continue;

@@ -149,7 +149,7 @@ void handle_client(int socket_fd) {
 
     while (1) {
         int n = read_message(socket_fd, buf, sizeof(buf));
-        if (n <= 0) break;
+        if (n != 0) break;
 
         Request req;
         if (parse_request(buf, &req) != 0) {

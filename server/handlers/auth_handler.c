@@ -71,7 +71,7 @@ Response handle_login(Request *req) {
         return make_error(ERR_INTERNAL);
     }
 
-    if (!verify_password(password, hash_out)) {
+    if (verify_password(password, hash_out) != 0) {
         return make_error(ERR_UNAUTHORIZED);
     }
 

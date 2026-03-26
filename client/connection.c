@@ -65,7 +65,12 @@ Response send_and_wait(Request req) {
     g_response_ready = 0;
     pthread_mutex_unlock(&g_resp_mutex);
 
+    fprintf(stderr, "[debug] sending request: %s %s\n", req.route, req.type == POST ? "POST" : "GET");
+    fflush(stderr);
+
     if (send_request(g_socket_fd, req) < 0) {
+        fprintf(stderr, "[debug] send_request failed\n");
+        fflush(stderr);
         Response err;
         err.kind    = MSG_RESPONSE;
         err.code    = ERR_INTERNAL;
@@ -73,12 +78,18 @@ Response send_and_wait(Request req) {
         return err;
     }
 
+    fprintf(stderr, "[debug] waiting for response...\n");
+    fflush(stderr);
+
     pthread_mutex_lock(&g_resp_mutex);
     while (!g_response_ready) {
         pthread_cond_wait(&g_resp_cond, &g_resp_mutex);
     }
     Response res = g_pending_response;
     pthread_mutex_unlock(&g_resp_mutex);
+
+    fprintf(stderr, "[debug] got response code=%d\n", res.code);
+    fflush(stderr);
 
     return res;
 }
