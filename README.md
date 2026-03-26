@@ -206,8 +206,7 @@ typedef struct { ... } Notification;
 
 ### `server/client_handler.h` / `client_handler.c`
 Логика обработки одного клиента (выполняется в дочернем процессе после fork).
-- `void handle_client(int socket_fd)` — главный цикл чтения запросов от клиента и отправки ответов
-- `int dispatch_request(int socket_fd, Request *req, const char *login)` — маршрутизирует запрос к нужному обработчику по route и type
+- `void handle_client(int socket_fd)` — главный цикл чтения запросов от клиента, маршрутизации и отправки ответов
 
 ### `server/handlers/auth_handler.h` / `auth_handler.c`
 Обработчики маршрутов `/register`, `/login`, `/info`.
