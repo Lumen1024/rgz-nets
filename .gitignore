@@ -1,6 +1,8 @@
-chat_client
-chat_server
-*.txt
-README.md
 .vscode
-bin
+.claude
+bin/
+*.o
+*.a
+data/
+lib/cJSON.c
+lib/cJSON.h
