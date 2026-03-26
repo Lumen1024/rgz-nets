@@ -18,6 +18,15 @@
 #include <user_repository.h>
 #include <notify.h>
 
+static const char *method_str(RequestType t) {
+    switch (t) {
+        case GET:    return "GET";
+        case POST:   return "POST";
+        case DELETE: return "DELETE";
+        default:     return "?";
+    }
+}
+
 // Extract segment from route at position idx (0-based), returns 0 on success
 static int route_segment(const char *route, int idx, char *out, size_t out_size) {
     const char *p = route;
@@ -168,6 +177,13 @@ void handle_client(int socket_fd) {
         }
 
         Response resp = dispatch(&req, login[0] ? login : NULL);
+
+        if (login[0])
+            printf("[%s] %s %s -> %d\n", login, method_str(req.type), req.route ? req.route : "/", resp.code);
+        else
+            printf("[anonymous] %s %s -> %d\n", method_str(req.type), req.route ? req.route : "/", resp.code);
+        fflush(stdout);
+
         send_response(socket_fd, resp);
 
         free_request(&req);

@@ -1,9 +1,20 @@
 #include <notify.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <notification.h>
 #include <chat_repository.h>
+
+static const char *notif_str(int code) {
+    switch (code) {
+        case NOTIF_NEW_MESSAGE:   return "NEW_MESSAGE";
+        case NOTIF_FILE_REQUEST:  return "FILE_REQUEST";
+        case NOTIF_FILE_APPROVED: return "FILE_APPROVED";
+        case NOTIF_FILE_DECLINED: return "FILE_DECLINED";
+        default:                  return "UNKNOWN";
+    }
+}
 
 // Shared memory between parent and child processes is not available after fork,
 // so notifications are sent by looking up the recipient's socket fd from a
@@ -48,6 +59,8 @@ void notify_unregister(int socket_fd) {
 void notify_user(const char *login, Notification notif) {
     for (int i = 0; i < client_count; i++) {
         if (strcmp(clients[i].login, login) == 0) {
+            printf("[notify] %s -> %s\n", notif_str(notif.code), login);
+            fflush(stdout);
             send_notification(clients[i].socket_fd, notif);
             return;
         }
