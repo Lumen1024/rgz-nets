@@ -3,52 +3,74 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/file.h>
 
 #define CHATS_FILE "data/chats.json"
 
-static cJSON *load_json_file(const char *path) {
-    FILE *f = fopen(path, "r");
-    if (!f) return cJSON_CreateArray();
-
-    fseek(f, 0, SEEK_END);
-    long len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    if (len <= 0) {
-        fclose(f);
+static cJSON *locked_load(const char *path, int *fd_out) {
+    int fd = open(path, O_RDWR | O_CREAT, 0644);
+    if (fd < 0) {
+        *fd_out = -1;
         return cJSON_CreateArray();
     }
 
-    char *buf = malloc(len + 1);
-    if (!buf) {
-        fclose(f);
-        return NULL;
-    }
+    flock(fd, LOCK_EX);
+    *fd_out = fd;
 
-    fread(buf, 1, len, f);
+    off_t len = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    if (len <= 0) return cJSON_CreateArray();
+
+    char *buf = malloc(len + 1);
+    if (!buf) return cJSON_CreateArray();
+
+    read(fd, buf, len);
     buf[len] = '\0';
-    fclose(f);
 
     cJSON *json = cJSON_Parse(buf);
     free(buf);
-
     return json ? json : cJSON_CreateArray();
 }
 
-static int save_json_file(const char *path, cJSON *json) {
+static int locked_save(int fd, cJSON *json) {
     char *str = cJSON_Print(json);
-    if (!str) return -1;
+    if (!str) { close(fd); return -1; }
 
-    FILE *f = fopen(path, "w");
-    if (!f) {
-        free(str);
-        return -1;
-    }
+    ftruncate(fd, 0);
+    lseek(fd, 0, SEEK_SET);
 
-    fprintf(f, "%s", str);
-    fclose(f);
+    ssize_t len = (ssize_t)strlen(str);
+    ssize_t written = write(fd, str, len);
     free(str);
-    return 0;
+    close(fd);
+
+    return (written == len) ? 0 : -1;
+}
+
+static cJSON *load_json_file(const char *path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return cJSON_CreateArray();
+
+    flock(fd, LOCK_SH);
+
+    off_t len = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    if (len <= 0) { close(fd); return cJSON_CreateArray(); }
+
+    char *buf = malloc(len + 1);
+    if (!buf) { close(fd); return cJSON_CreateArray(); }
+
+    read(fd, buf, len);
+    buf[len] = '\0';
+    close(fd);
+
+    cJSON *json = cJSON_Parse(buf);
+    free(buf);
+    return json ? json : cJSON_CreateArray();
 }
 
 static cJSON *find_chat(cJSON *arr, const char *name) {
@@ -63,7 +85,8 @@ static cJSON *find_chat(cJSON *arr, const char *name) {
 }
 
 int repo_chat_create(const char *name, const char *creator) {
-    cJSON *arr = load_json_file(CHATS_FILE);
+    int fd;
+    cJSON *arr = locked_load(CHATS_FILE, &fd);
     if (!arr) return -1;
 
     cJSON *chat = cJSON_CreateObject();
@@ -76,13 +99,14 @@ int repo_chat_create(const char *name, const char *creator) {
 
     cJSON_AddItemToArray(arr, chat);
 
-    int ret = save_json_file(CHATS_FILE, arr);
+    int ret = locked_save(fd, arr);
     cJSON_Delete(arr);
     return ret;
 }
 
 int repo_chat_delete(const char *name) {
-    cJSON *arr = load_json_file(CHATS_FILE);
+    int fd;
+    cJSON *arr = locked_load(CHATS_FILE, &fd);
     if (!arr) return -1;
 
     int size = cJSON_GetArraySize(arr);
@@ -91,12 +115,13 @@ int repo_chat_delete(const char *name) {
         cJSON *n = cJSON_GetObjectItem(item, "name");
         if (n && cJSON_IsString(n) && strcmp(n->valuestring, name) == 0) {
             cJSON_DeleteItemFromArray(arr, i);
-            int ret = save_json_file(CHATS_FILE, arr);
+            int ret = locked_save(fd, arr);
             cJSON_Delete(arr);
             return ret;
         }
     }
 
+    close(fd);
     cJSON_Delete(arr);
     return -1;
 }
@@ -170,49 +195,55 @@ int repo_chat_list_for_user(const char *login, char ***names_out, int *count) {
 }
 
 int repo_chat_add_user(const char *chat, const char *login) {
-    cJSON *arr = load_json_file(CHATS_FILE);
+    int fd;
+    cJSON *arr = locked_load(CHATS_FILE, &fd);
     if (!arr) return -1;
 
     cJSON *c = find_chat(arr, chat);
     if (!c) {
+        close(fd);
         cJSON_Delete(arr);
         return -1;
     }
 
     cJSON *users = cJSON_GetObjectItem(c, "users");
     if (!users) {
+        close(fd);
         cJSON_Delete(arr);
         return -1;
     }
 
-    // Check if user already in chat
     cJSON *u;
     cJSON_ArrayForEach(u, users) {
         if (cJSON_IsString(u) && strcmp(u->valuestring, login) == 0) {
+            close(fd);
             cJSON_Delete(arr);
-            return 0; // already a member
+            return 0;
         }
     }
 
     cJSON_AddItemToArray(users, cJSON_CreateString(login));
 
-    int ret = save_json_file(CHATS_FILE, arr);
+    int ret = locked_save(fd, arr);
     cJSON_Delete(arr);
     return ret;
 }
 
 int repo_chat_remove_user(const char *chat, const char *login) {
-    cJSON *arr = load_json_file(CHATS_FILE);
+    int fd;
+    cJSON *arr = locked_load(CHATS_FILE, &fd);
     if (!arr) return -1;
 
     cJSON *c = find_chat(arr, chat);
     if (!c) {
+        close(fd);
         cJSON_Delete(arr);
         return -1;
     }
 
     cJSON *users = cJSON_GetObjectItem(c, "users");
     if (!users) {
+        close(fd);
         cJSON_Delete(arr);
         return -1;
     }
@@ -222,12 +253,13 @@ int repo_chat_remove_user(const char *chat, const char *login) {
         cJSON *u = cJSON_GetArrayItem(users, i);
         if (cJSON_IsString(u) && strcmp(u->valuestring, login) == 0) {
             cJSON_DeleteItemFromArray(users, i);
-            int ret = save_json_file(CHATS_FILE, arr);
+            int ret = locked_save(fd, arr);
             cJSON_Delete(arr);
             return ret;
         }
     }
 
+    close(fd);
     cJSON_Delete(arr);
     return -1;
 }

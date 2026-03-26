@@ -3,31 +3,35 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/file.h>
 
 #define USERS_FILE "data/users.json"
 
-static cJSON *load_json_file(const char *path) {
-    FILE *f = fopen(path, "r");
-    if (!f) return cJSON_CreateArray();
-
-    fseek(f, 0, SEEK_END);
-    long len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    if (len <= 0) {
-        fclose(f);
+// Opens file, acquires LOCK_EX, reads and parses JSON.
+// Returns parsed JSON (caller must cJSON_Delete) and stores fd in *fd_out.
+// Caller must call locked_save or close(*fd_out) to release the lock.
+static cJSON *locked_load(const char *path, int *fd_out) {
+    int fd = open(path, O_RDWR | O_CREAT, 0644);
+    if (fd < 0) {
+        *fd_out = -1;
         return cJSON_CreateArray();
     }
 
-    char *buf = malloc(len + 1);
-    if (!buf) {
-        fclose(f);
-        return NULL;
-    }
+    flock(fd, LOCK_EX);
+    *fd_out = fd;
 
-    fread(buf, 1, len, f);
+    off_t len = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    if (len <= 0) return cJSON_CreateArray();
+
+    char *buf = malloc(len + 1);
+    if (!buf) return cJSON_CreateArray();
+
+    read(fd, buf, len);
     buf[len] = '\0';
-    fclose(f);
 
     cJSON *json = cJSON_Parse(buf);
     free(buf);
@@ -35,20 +39,44 @@ static cJSON *load_json_file(const char *path) {
     return json ? json : cJSON_CreateArray();
 }
 
-static int save_json_file(const char *path, cJSON *json) {
+// Truncates file, writes JSON, then closes fd (releases flock).
+static int locked_save(int fd, cJSON *json) {
     char *str = cJSON_Print(json);
-    if (!str) return -1;
+    if (!str) { close(fd); return -1; }
 
-    FILE *f = fopen(path, "w");
-    if (!f) {
-        free(str);
-        return -1;
-    }
+    ftruncate(fd, 0);
+    lseek(fd, 0, SEEK_SET);
 
-    fprintf(f, "%s", str);
-    fclose(f);
+    ssize_t len = (ssize_t)strlen(str);
+    ssize_t written = write(fd, str, len);
     free(str);
-    return 0;
+    close(fd);  // releases flock
+
+    return (written == len) ? 0 : -1;
+}
+
+// Read-only load: shared lock, no fd returned.
+static cJSON *load_json_file(const char *path) {
+    int fd = open(path, O_RDONLY);
+    if (fd < 0) return cJSON_CreateArray();
+
+    flock(fd, LOCK_SH);
+
+    off_t len = lseek(fd, 0, SEEK_END);
+    lseek(fd, 0, SEEK_SET);
+
+    if (len <= 0) { close(fd); return cJSON_CreateArray(); }
+
+    char *buf = malloc(len + 1);
+    if (!buf) { close(fd); return cJSON_CreateArray(); }
+
+    read(fd, buf, len);
+    buf[len] = '\0';
+    close(fd);  // releases flock
+
+    cJSON *json = cJSON_Parse(buf);
+    free(buf);
+    return json ? json : cJSON_CreateArray();
 }
 
 int repo_user_exists(const char *login) {
@@ -69,7 +97,8 @@ int repo_user_exists(const char *login) {
 }
 
 int repo_user_create(const char *login, const char *password_hash) {
-    cJSON *arr = load_json_file(USERS_FILE);
+    int fd;
+    cJSON *arr = locked_load(USERS_FILE, &fd);
     if (!arr) return -1;
 
     cJSON *user = cJSON_CreateObject();
@@ -77,7 +106,7 @@ int repo_user_create(const char *login, const char *password_hash) {
     cJSON_AddStringToObject(user, "password_hash", password_hash);
     cJSON_AddItemToArray(arr, user);
 
-    int ret = save_json_file(USERS_FILE, arr);
+    int ret = locked_save(fd, arr);
     cJSON_Delete(arr);
     return ret;
 }
