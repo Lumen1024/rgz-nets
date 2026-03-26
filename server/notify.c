@@ -1,5 +1,6 @@
 #include <notify.h>
 
+#include <stdlib.h>
 #include <string.h>
 #include <notification.h>
 #include <chat_repository.h>
