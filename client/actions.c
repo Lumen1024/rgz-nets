@@ -99,6 +99,58 @@ void *action_create_chat(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
+void *action_add_chat_user(void *args) {
+    ChatUserArgs *a = (ChatUserArgs *)args;
+
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", a->login);
+
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/chats/%s/users", a->chat);
+
+    Request req = make_req(POST, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    free_response(&res);
+    return (void *)(intptr_t)res.code;
+}
+
+void *action_remove_chat_user(void *args) {
+    ChatUserArgs *a = (ChatUserArgs *)args;
+
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", a->login);
+
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/chats/%s/users", a->chat);
+
+    Request req = make_req(DELETE, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    free_response(&res);
+    return (void *)(intptr_t)res.code;
+}
+
+void *action_leave_chat(void *args) {
+    LeaveChatArgs *a = (LeaveChatArgs *)args;
+
+    // Use empty login — server will use token to identify the user
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", "");
+
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/chats/%s/users", a->chat);
+
+    Request req = make_req(DELETE, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    free_response(&res);
+    return (void *)(intptr_t)res.code;
+}
+
 void *action_send_file(void *args) {
     SendFileArgs *a = (SendFileArgs *)args;
 

@@ -14,60 +14,93 @@
 #include <pthread.h>
 
 // ─── Color pairs ─────────────────────────────────────────────────────────────
-#define CP_DEFAULT  1
-#define CP_SELECTED 2  // yellow border
-#define CP_ACTIVE   3  // green border
-#define CP_NOTIFY   4
+#define CP_DEFAULT   1
+#define CP_SELECTED  2  // yellow border
+#define CP_ACTIVE    3  // green border
+#define CP_NOTIFY    4
+#define CP_SYS       5  // system bar
+#define CP_DIM       6  // grey text (users without messages)
 
 // ─── Layout ──────────────────────────────────────────────────────────────────
-// Left panel: chat view   Right panel: chat list
-// Ratio: 70% / 30%
+// Left panel (70%): messages + input
+// Right panel (30%): list (chats or users)
+// Bottom bar (1 row): system messages + command input
 
-static WINDOW *g_win_chat      = NULL; // left border window
-static WINDOW *g_win_chat_in   = NULL; // inner content of left panel
-static WINDOW *g_win_list      = NULL; // right border window
-static WINDOW *g_win_list_in   = NULL; // inner content of right panel
+#define SYS_BAR_H 3  // system bar height (border + 1 content row)
+
+static WINDOW *g_win_chat      = NULL;
+static WINDOW *g_win_chat_in   = NULL;
+static WINDOW *g_win_list      = NULL;
+static WINDOW *g_win_list_in   = NULL;
+static WINDOW *g_win_sys       = NULL; // system bar window
 
 static int g_rows = 0, g_cols = 0;
 static int g_left_w = 0, g_right_w = 0;
+static int g_main_h = 0; // height of main area (rows - SYS_BAR_H)
 
 // ─── Chat panel state ─────────────────────────────────────────────────────────
 #define MAX_MESSAGES 512
 static Message  g_messages[MAX_MESSAGES];
 static int      g_msg_count   = 0;
-static int      g_msg_scroll  = 0; // index of first visible message (from bottom)
+static int      g_msg_scroll  = 0;
 static char     g_current_chat[MAX_ROUTE_LEN] = {0};
 static char     g_input[MAX_TEXT_LEN]         = {0};
 static int      g_input_len   = 0;
 
 // ─── Chat list state ──────────────────────────────────────────────────────────
 #define MAX_CHATS 128
-#define CHAT_ROUTE_LEN (MAX_ROUTE_LEN + 18) // "/chats/" + name + "/messages"
+#define CHAT_ROUTE_LEN (MAX_ROUTE_LEN + 18)
 static char  g_chat_names[MAX_CHATS][MAX_ROUTE_LEN];
 static int   g_chat_count    = 0;
-static int   g_list_selected = 0; // cursor in list panel
+
+// ─── User list state ──────────────────────────────────────────────────────────
+#define MAX_USERS 256
+static char g_user_names[MAX_USERS][MAX_LOGIN_LEN];
+static int  g_user_has_msg[MAX_USERS]; // 1 = has dialog, 0 = no messages
+static int  g_user_count = 0;
+
+// ─── Right panel mode ─────────────────────────────────────────────────────────
+static ListMode g_list_mode    = LIST_MODE_CHATS;
+static int      g_list_selected = 0;
 
 // ─── Focus/active state ───────────────────────────────────────────────────────
-// focus: which panel is highlighted (keyboard cursor between panels)
-// active: which panel is currently receiving input
-typedef enum { PANEL_NONE = -1, PANEL_CHAT = 0, PANEL_LIST = 1 } Panel;
+typedef enum { PANEL_NONE = -1, PANEL_CHAT = 0, PANEL_LIST = 1, PANEL_SYS = 2 } Panel;
 static Panel g_focus  = PANEL_CHAT;
 static Panel g_active = PANEL_NONE;
 
-// ─── Mutex for UI state (modified from reader thread) ─────────────────────────
-static pthread_mutex_t g_ui_mutex = PTHREAD_MUTEX_INITIALIZER;
+// ─── System bar state ─────────────────────────────────────────────────────────
+#define MAX_SYS_MSG 512
+static char g_sys_msg[MAX_SYS_MSG] = {0}; // last system message
+static char g_sys_input[MAX_TEXT_LEN] = {0};
+static int  g_sys_input_len = 0;
+// When sys bar is collecting input for a specific operation:
+typedef enum {
+    SYS_IDLE = 0,
+    SYS_WAIT_CONFIRM  // awaiting y/n confirmation
+} SysState;
+static SysState g_sys_state = SYS_IDLE;
 
 // ─── Notification overlay ────────────────────────────────────────────────────
 static char g_notify_text[256] = {0};
+
+// ─── Mutex for UI state (modified from reader thread) ─────────────────────────
+static pthread_mutex_t g_ui_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // ─── Forward declarations ────────────────────────────────────────────────────
 static void draw_all(void);
 static void draw_chat_panel(void);
 static void draw_list_panel(void);
+static void draw_sys_bar(void);
 static void draw_notify(void);
 static int  border_color(Panel panel);
 static void load_chat_messages(const char *route);
 static void load_chat_list(void);
+static void load_user_list(void);
+static void list_current_count(int *count);
+static const char *list_current_name(int idx);
+static void handle_sys_input(void);
+static void handle_command(const char *cmd);
+static void open_selected_item(void);
 
 // ─── Init / destroy ──────────────────────────────────────────────────────────
 
@@ -83,18 +116,23 @@ void ui_init(void) {
     init_pair(CP_SELECTED, COLOR_YELLOW, COLOR_BLACK);
     init_pair(CP_ACTIVE,   COLOR_GREEN,  COLOR_BLACK);
     init_pair(CP_NOTIFY,   COLOR_BLACK,  COLOR_YELLOW);
+    init_pair(CP_SYS,      COLOR_CYAN,   COLOR_BLACK);
+    init_pair(CP_DIM,      COLOR_WHITE,  COLOR_BLACK); // will use A_DIM
 
     getmaxyx(stdscr, g_rows, g_cols);
+    g_main_h  = g_rows - SYS_BAR_H;
     g_left_w  = (g_cols * 7) / 10;
     g_right_w = g_cols - g_left_w;
 
-    // Border windows (full height)
-    g_win_chat    = newwin(g_rows, g_left_w,  0, 0);
-    g_win_list    = newwin(g_rows, g_right_w, 0, g_left_w);
+    // Main panels occupy top (g_main_h) rows
+    g_win_chat    = newwin(g_main_h, g_left_w,  0, 0);
+    g_win_list    = newwin(g_main_h, g_right_w, 0, g_left_w);
 
-    // Inner windows (inside the border: -2 rows for top/bottom border, -2 cols)
-    g_win_chat_in = newwin(g_rows - 2, g_left_w  - 2, 1, 1);
-    g_win_list_in = newwin(g_rows - 2, g_right_w - 2, 1, g_left_w + 1);
+    g_win_chat_in = newwin(g_main_h - 2, g_left_w  - 2, 1, 1);
+    g_win_list_in = newwin(g_main_h - 2, g_right_w - 2, 1, g_left_w + 1);
+
+    // System bar at the bottom
+    g_win_sys = newwin(SYS_BAR_H, g_cols, g_main_h, 0);
 
     scrollok(g_win_chat_in, FALSE);
     scrollok(g_win_list_in, FALSE);
@@ -105,6 +143,7 @@ void ui_destroy(void) {
     if (g_win_list_in) { delwin(g_win_list_in); g_win_list_in = NULL; }
     if (g_win_chat)    { delwin(g_win_chat);    g_win_chat    = NULL; }
     if (g_win_list)    { delwin(g_win_list);    g_win_list    = NULL; }
+    if (g_win_sys)     { delwin(g_win_sys);     g_win_sys     = NULL; }
     endwin();
 }
 
@@ -187,6 +226,18 @@ void ui_set_chat_list(char **names, int count) {
     draw_all();
 }
 
+void ui_set_user_list(char **names, int *has_messages, int count) {
+    pthread_mutex_lock(&g_ui_mutex);
+    g_user_count = count < MAX_USERS ? count : MAX_USERS;
+    for (int i = 0; i < g_user_count; i++) {
+        strncpy(g_user_names[i], names[i], MAX_LOGIN_LEN - 1);
+        g_user_has_msg[i] = has_messages[i];
+    }
+    g_list_selected = 0;
+    pthread_mutex_unlock(&g_ui_mutex);
+    draw_all();
+}
+
 void ui_append_message(Message *msg) {
     pthread_mutex_lock(&g_ui_mutex);
     if (g_msg_count < MAX_MESSAGES) {
@@ -205,6 +256,15 @@ void ui_notify(const char *text) {
     draw_all();
 }
 
+void ui_sys(const char *text) {
+    pthread_mutex_lock(&g_ui_mutex);
+    strncpy(g_sys_msg, text, MAX_SYS_MSG - 1);
+    pthread_mutex_unlock(&g_ui_mutex);
+    draw_sys_bar();
+    wnoutrefresh(g_win_sys);
+    doupdate();
+}
+
 // ─── Drawing ─────────────────────────────────────────────────────────────────
 
 static int border_color(Panel panel) {
@@ -218,12 +278,10 @@ static void draw_chat_panel(void) {
     wattron(g_win_chat, COLOR_PAIR(cp));
     box(g_win_chat, 0, 0);
 
-    // Title
     const char *title = g_current_chat[0] ? g_current_chat : "[ no chat ]";
     mvwprintw(g_win_chat, 0, 2, " %s ", title);
     wattroff(g_win_chat, COLOR_PAIR(cp));
 
-    // Inner area: messages above, input line at bottom
     int inner_h, inner_w;
     getmaxyx(g_win_chat_in, inner_h, inner_w);
     (void)inner_w;
@@ -232,12 +290,11 @@ static void draw_chat_panel(void) {
 
     werase(g_win_chat_in);
 
-    // Draw messages (bottom-aligned, scroll offset from bottom)
-    int visible  = msg_h;
-    int total    = g_msg_count;
-    int start    = total - visible - g_msg_scroll;
+    int visible = msg_h;
+    int total   = g_msg_count;
+    int start   = total - visible - g_msg_scroll;
     if (start < 0) start = 0;
-    int end      = start + visible;
+    int end     = start + visible;
     if (end > total) end = total;
 
     for (int i = start; i < end; i++) {
@@ -246,10 +303,8 @@ static void draw_chat_panel(void) {
             g_messages[i].login, g_messages[i].text);
     }
 
-    // Separator line
     mvwhline(g_win_chat_in, msg_h, 0, ACS_HLINE, inner_w);
 
-    // Input line
     if (g_active == PANEL_CHAT) {
         curs_set(1);
         mvwprintw(g_win_chat_in, msg_h + 1, 0, "> %s", g_input);
@@ -267,7 +322,13 @@ static void draw_list_panel(void) {
     int cp = border_color(PANEL_LIST);
     wattron(g_win_list, COLOR_PAIR(cp));
     box(g_win_list, 0, 0);
-    mvwprintw(g_win_list, 0, 2, " Chats ");
+
+    // Title shows current mode + hint for switching
+    if (g_list_mode == LIST_MODE_CHATS) {
+        mvwprintw(g_win_list, 0, 2, " Chats [</>] ");
+    } else {
+        mvwprintw(g_win_list, 0, 2, " Users [</>] ");
+    }
     wattroff(g_win_list, COLOR_PAIR(cp));
 
     int inner_h, inner_w;
@@ -276,25 +337,35 @@ static void draw_list_panel(void) {
 
     werase(g_win_list_in);
 
-    // Scroll list so selected item is always visible
+    int count = 0;
+    list_current_count(&count);
+
     int offset = 0;
     if (g_list_selected >= inner_h) {
         offset = g_list_selected - inner_h + 1;
     }
 
-    for (int i = 0; i < g_chat_count && (i - offset) < inner_h; i++) {
+    for (int i = 0; i < count && (i - offset) < inner_h; i++) {
         int row = i - offset;
         if (row < 0) continue;
+
+        const char *name = list_current_name(i);
+
         if (i == g_list_selected && g_active == PANEL_LIST) {
             wattron(g_win_list_in, A_REVERSE);
-            mvwprintw(g_win_list_in, row, 0, "%s", g_chat_names[i]);
+            mvwprintw(g_win_list_in, row, 0, "%s", name);
             wattroff(g_win_list_in, A_REVERSE);
         } else if (i == g_list_selected) {
             wattron(g_win_list_in, A_BOLD);
-            mvwprintw(g_win_list_in, row, 0, "> %s", g_chat_names[i]);
+            mvwprintw(g_win_list_in, row, 0, "> %s", name);
             wattroff(g_win_list_in, A_BOLD);
+        } else if (g_list_mode == LIST_MODE_USERS && !g_user_has_msg[i]) {
+            // Grey out users without messages
+            wattron(g_win_list_in, A_DIM);
+            mvwprintw(g_win_list_in, row, 0, "  %s", name);
+            wattroff(g_win_list_in, A_DIM);
         } else {
-            mvwprintw(g_win_list_in, row, 0, "  %s", g_chat_names[i]);
+            mvwprintw(g_win_list_in, row, 0, "  %s", name);
         }
     }
 
@@ -302,16 +373,54 @@ static void draw_list_panel(void) {
     wnoutrefresh(g_win_list_in);
 }
 
+static void draw_sys_bar(void) {
+    int cp = border_color(PANEL_SYS);
+    wattron(g_win_sys, COLOR_PAIR(cp));
+    box(g_win_sys, 0, 0);
+
+    int bar_w;
+    {
+        int tmp;
+        getmaxyx(g_win_sys, tmp, bar_w);
+        (void)tmp;
+    }
+
+    // Show mode hint in title
+    mvwprintw(g_win_sys, 0, 2, " System ");
+    wattroff(g_win_sys, COLOR_PAIR(cp));
+
+    // Line 1 inside: system message (last status)
+    wattron(g_win_sys, COLOR_PAIR(CP_SYS));
+    mvwprintw(g_win_sys, 1, 1, "%-*.*s", bar_w - 2, bar_w - 2, g_sys_msg);
+    wattroff(g_win_sys, COLOR_PAIR(CP_SYS));
+
+    // Input line is drawn when sys bar is active
+    if (g_active == PANEL_SYS) {
+        curs_set(1);
+        // Show prompt in last row of sys bar (row 2 if SYS_BAR_H=3, but we use line 1 for msg and input inline)
+        // Since SYS_BAR_H=3: row0=border, row1=content, row2=border
+        // We'll reuse row1: left half = status, replaced by input when active
+        mvwprintw(g_win_sys, 1, 1, "> %-*.*s", bar_w - 4, bar_w - 4, g_sys_input);
+        wmove(g_win_sys, 1, 3 + g_sys_input_len);
+    } else {
+        curs_set(0);
+    }
+
+    wnoutrefresh(g_win_sys);
+}
+
 static void draw_notify(void) {
     if (!g_notify_text[0]) return;
 
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
+    (void)rows;
 
     int nw = (int)strlen(g_notify_text) + 4;
     if (nw > cols - 4) nw = cols - 4;
     int nx = (cols - nw) / 2;
-    int ny = rows - 3;
+    int ny = g_main_h - 4;
+    if (ny < 0) ny = 0;
 
     WINDOW *w = newwin(3, nw, ny, nx);
     wattron(w, COLOR_PAIR(CP_NOTIFY));
@@ -326,19 +435,63 @@ static void draw_all(void) {
     pthread_mutex_lock(&g_ui_mutex);
     draw_chat_panel();
     draw_list_panel();
+    draw_sys_bar();
     doupdate();
     draw_notify();
     pthread_mutex_unlock(&g_ui_mutex);
 }
 
-// ─── Helper: open a chat by index ─────────────────────────────────────────────
+// ─── Helper: current list item access ────────────────────────────────────────
+
+static void list_current_count(int *count) {
+    if (g_list_mode == LIST_MODE_CHATS) {
+        *count = g_chat_count;
+    } else {
+        *count = g_user_count;
+    }
+}
+
+static const char *list_current_name(int idx) {
+    if (g_list_mode == LIST_MODE_CHATS) {
+        return g_chat_names[idx];
+    } else {
+        return g_user_names[idx];
+    }
+}
+
+// ─── Helper: open selected item in list ──────────────────────────────────────
+
+static void open_selected_item(void) {
+    int count = 0;
+    list_current_count(&count);
+    if (count == 0) return;
+
+    if (g_list_mode == LIST_MODE_CHATS) {
+        char route[CHAT_ROUTE_LEN];
+        snprintf(route, sizeof(route), "/chats/%s/messages",
+            g_chat_names[g_list_selected]);
+        g_active = PANEL_NONE;
+        g_focus  = PANEL_CHAT;
+        load_chat_messages(route);
+    } else {
+        // Open private dialog with selected user
+        char route[MAX_ROUTE_LEN];
+        snprintf(route, sizeof(route), "/users/%s/messages",
+            g_user_names[g_list_selected]);
+        g_active = PANEL_NONE;
+        g_focus  = PANEL_CHAT;
+        load_chat_messages(route);
+    }
+}
+
+// ─── Helper: open a chat/dialog by route ─────────────────────────────────────
 
 static void load_chat_messages(const char *route) {
     Request req;
     req.kind    = MSG_REQUEST;
     req.type    = GET;
     req.route   = (char *)route;
-    req.token   = NULL; // connection.c fills token via send_and_wait -> send_request
+    req.token   = NULL;
     req.content = NULL;
 
     Response res = send_and_wait(req);
@@ -347,7 +500,6 @@ static void load_chat_messages(const char *route) {
         return;
     }
 
-    // content is array of {login, text, timestamp}
     Message msgs[MAX_MESSAGES];
     int count = 0;
     int arr_size = cJSON_GetArraySize(res.content);
@@ -396,10 +548,173 @@ static void load_chat_list(void) {
     free_response(&res);
 }
 
+static void load_user_list(void) {
+    Request req;
+    req.kind    = MSG_REQUEST;
+    req.type    = GET;
+    req.route   = "/users";
+    req.token   = NULL;
+    req.content = NULL;
+
+    Response res = send_and_wait(req);
+    if (res.code != ERR_OK || !res.content) {
+        free_response(&res);
+        return;
+    }
+
+    char *names[MAX_USERS];
+    int  has_msg[MAX_USERS];
+    int count = 0;
+    int arr_size = cJSON_GetArraySize(res.content);
+    for (int i = 0; i < arr_size && count < MAX_USERS; i++) {
+        cJSON *item = cJSON_GetArrayItem(res.content, i);
+        if (cJSON_IsString(item)) {
+            names[count]   = item->valuestring;
+            has_msg[count] = 0; // default: no messages; server may return richer data later
+            count++;
+        }
+    }
+
+    ui_set_user_list(names, has_msg, count);
+    free_response(&res);
+}
+
+// ─── Command processing ───────────────────────────────────────────────────────
+
+// Extract "chat name" from current route, e.g. "/chats/general/messages" -> "general"
+static int current_chat_name(char *out, int maxlen) {
+    // Routes: /chats/{name}/messages  or  /users/{login}/messages
+    if (strncmp(g_current_chat, "/chats/", 7) == 0) {
+        const char *p = g_current_chat + 7;
+        const char *slash = strchr(p, '/');
+        int len = slash ? (int)(slash - p) : (int)strlen(p);
+        if (len >= maxlen) return 0;
+        strncpy(out, p, len);
+        out[len] = '\0';
+        return 1;
+    }
+    return 0;
+}
+
+static int is_private_chat(void) {
+    return strncmp(g_current_chat, "/users/", 7) == 0;
+}
+
+static void handle_command(const char *cmd) {
+    char arg[MAX_SYS_MSG];
+    char chat[MAX_ROUTE_LEN];
+
+    // /create <chatname>
+    if (strncmp(cmd, "/create ", 8) == 0) {
+        const char *name = cmd + 8;
+        if (name[0] == '\0') {
+            ui_sys("Usage: /create <chatname>");
+            return;
+        }
+        CreateChatArgs *a = malloc(sizeof(CreateChatArgs));
+        strncpy(a->name, name, sizeof(a->name) - 1);
+        pthread_t tid;
+        pthread_create(&tid, NULL, action_create_chat, a);
+        pthread_detach(tid);
+        snprintf(arg, sizeof(arg), "Creating chat '%s'...", name);
+        ui_sys(arg);
+        // Refresh chat list after a brief yield
+        load_chat_list();
+        return;
+    }
+
+    // /add <username>  — add user to current chat
+    if (strncmp(cmd, "/add ", 5) == 0) {
+        const char *login = cmd + 5;
+        if (login[0] == '\0') {
+            ui_sys("Usage: /add <username>");
+            return;
+        }
+        if (!current_chat_name(chat, sizeof(chat))) {
+            ui_sys("Error: not in a group chat");
+            return;
+        }
+        ChatUserArgs *a = malloc(sizeof(ChatUserArgs));
+        strncpy(a->chat,  chat,  sizeof(a->chat)  - 1);
+        strncpy(a->login, login, sizeof(a->login) - 1);
+        pthread_t tid;
+        pthread_create(&tid, NULL, action_add_chat_user, a);
+        pthread_detach(tid);
+        snprintf(arg, sizeof(arg), "Adding '%s' to '%s'...", login, chat);
+        ui_sys(arg);
+        return;
+    }
+
+    // /delete <username>  — remove user from current chat (creator only)
+    if (strncmp(cmd, "/delete ", 8) == 0) {
+        const char *login = cmd + 8;
+        if (login[0] == '\0') {
+            ui_sys("Usage: /delete <username>");
+            return;
+        }
+        if (!current_chat_name(chat, sizeof(chat))) {
+            ui_sys("Error: not in a group chat");
+            return;
+        }
+        ChatUserArgs *a = malloc(sizeof(ChatUserArgs));
+        strncpy(a->chat,  chat,  sizeof(a->chat)  - 1);
+        strncpy(a->login, login, sizeof(a->login) - 1);
+        pthread_t tid;
+        pthread_create(&tid, NULL, action_remove_chat_user, a);
+        pthread_detach(tid);
+        snprintf(arg, sizeof(arg), "Removing '%s' from '%s'...", login, chat);
+        ui_sys(arg);
+        return;
+    }
+
+    // /leave  — leave current group chat
+    if (strcmp(cmd, "/leave") == 0) {
+        if (is_private_chat()) {
+            ui_sys("Error: cannot leave a private dialog");
+            return;
+        }
+        if (!current_chat_name(chat, sizeof(chat))) {
+            ui_sys("Error: not in a group chat");
+            return;
+        }
+        LeaveChatArgs *a = malloc(sizeof(LeaveChatArgs));
+        strncpy(a->chat, chat, sizeof(a->chat) - 1);
+        pthread_t tid;
+        pthread_create(&tid, NULL, action_leave_chat, a);
+        pthread_detach(tid);
+        // Clear chat view and reload list
+        g_current_chat[0] = '\0';
+        g_msg_count = 0;
+        load_chat_list();
+        ui_sys("Left the chat.");
+        return;
+    }
+
+    snprintf(arg, sizeof(arg), "Unknown command: %s", cmd);
+    ui_sys(arg);
+}
+
+// Called when user presses Enter in the sys bar
+static void handle_sys_input(void) {
+    if (g_sys_input_len == 0) return;
+
+    if (g_sys_input[0] == '/') {
+        handle_command(g_sys_input);
+    } else {
+        // Plain system input (future use)
+        ui_sys(g_sys_input);
+    }
+
+    g_sys_input[0]   = '\0';
+    g_sys_input_len  = 0;
+    g_sys_state      = SYS_IDLE;
+}
+
 // ─── Main event loop ─────────────────────────────────────────────────────────
 
 void ui_run(void) {
     load_chat_list();
+    load_user_list();
     draw_all();
 
     int ch;
@@ -411,18 +726,68 @@ void ui_run(void) {
             continue;
         }
 
+        // ── System bar active ────────────────────────────────────────────────
+        if (g_active == PANEL_SYS) {
+            switch (ch) {
+                case '\n':
+                case KEY_ENTER:
+                    handle_sys_input();
+                    g_active = PANEL_NONE;
+                    break;
+                case KEY_BACKSPACE:
+                case 127:
+                    if (g_sys_input_len > 0) {
+                        g_sys_input[--g_sys_input_len] = '\0';
+                    }
+                    break;
+                case 27: // Escape
+                    g_sys_input[0]  = '\0';
+                    g_sys_input_len = 0;
+                    g_sys_state     = SYS_IDLE;
+                    g_active        = PANEL_NONE;
+                    break;
+                default:
+                    if (ch >= 32 && ch < 256 && g_sys_input_len < MAX_TEXT_LEN - 1) {
+                        g_sys_input[g_sys_input_len++] = (char)ch;
+                        g_sys_input[g_sys_input_len]   = '\0';
+                    }
+                    break;
+            }
+            draw_all();
+            continue;
+        }
+
+        // ── No panel active: navigation ──────────────────────────────────────
         if (g_active == PANEL_NONE) {
-            // Navigation between panels
             switch (ch) {
                 case KEY_LEFT:
-                    g_focus = PANEL_CHAT;
+                    if (g_focus == PANEL_LIST) {
+                        g_focus = PANEL_CHAT;
+                    } else if (g_focus == PANEL_SYS) {
+                        g_focus = PANEL_CHAT;
+                    }
                     break;
                 case KEY_RIGHT:
-                    g_focus = PANEL_LIST;
+                    if (g_focus == PANEL_CHAT) {
+                        g_focus = PANEL_LIST;
+                    } else if (g_focus == PANEL_SYS) {
+                        g_focus = PANEL_LIST;
+                    }
+                    break;
+                case KEY_DOWN:
+                    if (g_focus != PANEL_SYS) g_focus = PANEL_SYS;
+                    break;
+                case KEY_UP:
+                    if (g_focus == PANEL_SYS) g_focus = PANEL_CHAT;
                     break;
                 case '\n':
                 case KEY_ENTER:
                     g_active = g_focus;
+                    // When entering sys bar, clear old input
+                    if (g_active == PANEL_SYS) {
+                        g_sys_input[0]  = '\0';
+                        g_sys_input_len = 0;
+                    }
                     break;
                 default:
                     break;
@@ -431,24 +796,32 @@ void ui_run(void) {
             continue;
         }
 
+        // ── List panel active ────────────────────────────────────────────────
         if (g_active == PANEL_LIST) {
+            int count = 0;
+            list_current_count(&count);
             switch (ch) {
                 case KEY_UP:
                     if (g_list_selected > 0) g_list_selected--;
                     break;
                 case KEY_DOWN:
-                    if (g_list_selected < g_chat_count - 1) g_list_selected++;
+                    if (g_list_selected < count - 1) g_list_selected++;
+                    break;
+                case KEY_LEFT:
+                    // Switch mode to chats
+                    g_list_mode     = LIST_MODE_CHATS;
+                    g_list_selected = 0;
+                    load_chat_list();
+                    break;
+                case KEY_RIGHT:
+                    // Switch mode to users
+                    g_list_mode     = LIST_MODE_USERS;
+                    g_list_selected = 0;
+                    load_user_list();
                     break;
                 case '\n':
                 case KEY_ENTER:
-                    if (g_chat_count > 0) {
-                        char route[CHAT_ROUTE_LEN];
-                        snprintf(route, sizeof(route), "/chats/%s/messages",
-                            g_chat_names[g_list_selected]);
-                        g_active = PANEL_NONE;
-                        g_focus  = PANEL_CHAT;
-                        load_chat_messages(route);
-                    }
+                    open_selected_item();
                     break;
                 case 27: // Escape
                     g_active = PANEL_NONE;
@@ -460,10 +833,10 @@ void ui_run(void) {
             continue;
         }
 
+        // ── Chat panel active ────────────────────────────────────────────────
         if (g_active == PANEL_CHAT) {
             switch (ch) {
                 case KEY_UP:
-                    // Scroll history up (show older messages)
                     if (g_msg_scroll < g_msg_count) g_msg_scroll++;
                     break;
                 case KEY_DOWN:
@@ -472,16 +845,19 @@ void ui_run(void) {
                 case '\n':
                 case KEY_ENTER:
                     if (g_input_len > 0 && g_current_chat[0]) {
-                        // Send message in a detached thread
-                        SendMessageArgs *a = malloc(sizeof(SendMessageArgs));
-                        strncpy(a->chat, g_current_chat, sizeof(a->chat) - 1);
-                        strncpy(a->text, g_input, sizeof(a->text) - 1);
-                        pthread_t tid;
-                        pthread_create(&tid, NULL, action_send_message, a);
-                        pthread_detach(tid);
-
-                        g_input[0]  = '\0';
-                        g_input_len = 0;
+                        if (g_input[0] == '/') {
+                            // Command entered in chat input
+                            handle_command(g_input);
+                        } else {
+                            SendMessageArgs *a = malloc(sizeof(SendMessageArgs));
+                            strncpy(a->chat, g_current_chat, sizeof(a->chat) - 1);
+                            strncpy(a->text, g_input, sizeof(a->text) - 1);
+                            pthread_t tid;
+                            pthread_create(&tid, NULL, action_send_message, a);
+                            pthread_detach(tid);
+                        }
+                        g_input[0]   = '\0';
+                        g_input_len  = 0;
                         g_msg_scroll = 0;
                     }
                     break;
