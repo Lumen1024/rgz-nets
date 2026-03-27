@@ -6,18 +6,24 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/socket.h>
+#include <sys/select.h>
+#include <sys/time.h>
 #include <sys/wait.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
 #include <client_handler.h>
+#include <notify.h>
 
 #define DEFAULT_PORT 8080
 #define BACKLOG      16
 
 static void reap_children(int sig) {
     (void)sig;
-    while (waitpid(-1, NULL, WNOHANG) > 0);
+    pid_t pid;
+    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+        notify_parent_unregister(pid);
+    }
 }
 
 int main(int argc, char *argv[]) {
@@ -57,6 +63,8 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
+    notify_init();
+
     printf("server listening on port %d\n", port);
 
     struct sigaction sa;
@@ -66,9 +74,19 @@ int main(int argc, char *argv[]) {
     sigaction(SIGCHLD, &sa, NULL);
 
     while (1) {
+        // Dispatch any pending notifications from children
+        notify_dispatch();
+
+        // Non-blocking accept via select with short timeout
+        fd_set rfds;
+        FD_ZERO(&rfds);
+        FD_SET(server_fd, &rfds);
+        struct timeval tv = {0, 10000}; // 10ms
+        int ready = select(server_fd + 1, &rfds, NULL, NULL, &tv);
+        if (ready <= 0) continue;
+
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
-
         int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
         if (client_fd < 0) {
             perror("accept");
@@ -76,23 +94,41 @@ int main(int argc, char *argv[]) {
         }
 
         printf("client connected: %s\n", inet_ntoa(client_addr.sin_addr));
+        fflush(stdout);
+
+        // Create pipe: parent reads [0], child writes [1]
+        int pipefd[2];
+        if (pipe(pipefd) < 0) {
+            perror("pipe");
+            close(client_fd);
+            continue;
+        }
 
         pid_t pid = fork();
         if (pid < 0) {
             perror("fork");
+            close(pipefd[0]);
+            close(pipefd[1]);
             close(client_fd);
             continue;
         }
 
         if (pid == 0) {
-            // Child process — handle client then exit
+            // Child: close server fd and pipe read-end
             close(server_fd);
+            close(pipefd[0]);
+            notify_child_init(pipefd[1]);
             handle_client(client_fd);
+            close(pipefd[1]);
             exit(0);
         }
 
-        // Parent — close client fd and wait for next connection
+        // Parent: keep a dup of client_fd for sending notifications,
+        // then close the original (child has its own copy from fork).
+        int parent_client_fd = dup(client_fd);
+        close(pipefd[1]);
         close(client_fd);
+        notify_parent_register(pid, pipefd[0], parent_client_fd);
     }
 
     close(server_fd);

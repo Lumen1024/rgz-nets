@@ -28,6 +28,9 @@ typedef struct {
     char filepath[512];
 } SendFileArgs;
 
+const char *actions_get_token(void);
+const char *actions_get_login(void);
+
 void *action_login(void *args);
 void *action_register(void *args);
 void *action_send_message(void *args);

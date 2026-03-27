@@ -18,3 +18,4 @@ void ui_set_user_list(char **names, int *has_messages, int count);
 void ui_append_message(Message *msg);
 void ui_notify(const char *text);
 void ui_sys(const char *text); // write to system bar
+const char *ui_get_current_chat(void); // returns current open chat route

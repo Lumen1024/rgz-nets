@@ -42,6 +42,7 @@ dirs:
 	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/handlers
 	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/repositories
 	@mkdir -p $(OBJ_DIR)/$(CLIENT_DIR)
+	@mkdir -p $(OBJ_DIR)/$(CLIENT_DIR)/ui
 	@mkdir -p $(OBJ_DIR)/$(LIB_DIR)
 
 # Compile cJSON

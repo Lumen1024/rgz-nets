@@ -8,6 +8,7 @@
 #include <string.h>
 #include <termios.h>
 #include <unistd.h>
+#include <locale.h>
 
 static void read_password(const char *prompt, char *out, int maxlen) {
     printf("%s", prompt);
@@ -51,6 +52,8 @@ int main(int argc, char *argv[]) {
         read_password("Password: ", password, sizeof(password));
         fast_login = 1;
     }
+
+    setlocale(LC_ALL, "");
 
     // 1. Ask for server address (if not provided via args)
     if (!fast_login)

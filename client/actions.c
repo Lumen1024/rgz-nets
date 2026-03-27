@@ -10,11 +10,16 @@
 #include <string.h>
 #include <stdio.h>
 
-// Token stored after successful login
-static char g_token[MAX_TOKEN_LEN] = {0};
+// Token and login stored after successful login
+static char g_token[MAX_TOKEN_LEN]    = {0};
+static char g_login[MAX_LOGIN_LEN]    = {0};
 
 const char *actions_get_token(void) {
     return g_token[0] ? g_token : NULL;
+}
+
+const char *actions_get_login(void) {
+    return g_login[0] ? g_login : NULL;
 }
 
 static Request make_req(RequestType type, const char *route, cJSON *content) {
@@ -43,6 +48,7 @@ void *action_login(void *args) {
         if (cJSON_IsString(token_item)) {
             strncpy(g_token, token_item->valuestring, MAX_TOKEN_LEN - 1);
         }
+        strncpy(g_login, a->login, MAX_LOGIN_LEN - 1);
         free_response(&res);
         return (void *)0;
     }
