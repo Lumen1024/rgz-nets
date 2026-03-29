@@ -81,8 +81,10 @@ void draw_list_panel(void) {
 
     if (g_list_mode == LIST_MODE_CHATS) {
         mvwprintw(g_win_list, 0, 2, " Chats [</>] ");
-    } else {
+    } else if (g_list_mode == LIST_MODE_USERS) {
         mvwprintw(g_win_list, 0, 2, " Users [</>] ");
+    } else {
+        mvwprintw(g_win_list, 0, 2, " Members [</>] ");
     }
     wattroff(g_win_list, COLOR_PAIR(cp));
 
@@ -92,20 +94,23 @@ void draw_list_panel(void) {
 
     werase(g_win_list_in);
 
-    int count = (g_list_mode == LIST_MODE_CHATS) ? g_chat_count : g_user_count;
+    int count;
+    if (g_list_mode == LIST_MODE_CHATS)        count = g_chat_count;
+    else if (g_list_mode == LIST_MODE_USERS)   count = g_user_count;
+    else                                        count = g_member_count;
 
     int offset = 0;
-    if (g_list_selected >= inner_h) {
+    if (g_list_selected >= inner_h)
         offset = g_list_selected - inner_h + 1;
-    }
 
     for (int i = 0; i < count && (i - offset) < inner_h; i++) {
         int row = i - offset;
         if (row < 0) continue;
 
-        const char *name = (g_list_mode == LIST_MODE_CHATS)
-                           ? g_chat_names[i]
-                           : g_user_names[i];
+        const char *name;
+        if (g_list_mode == LIST_MODE_CHATS)       name = g_chat_names[i];
+        else if (g_list_mode == LIST_MODE_USERS)  name = g_user_names[i];
+        else                                       name = g_member_names[i];
 
         if (i == g_list_selected && g_active == PANEL_LIST) {
             wattron(g_win_list_in, A_REVERSE);

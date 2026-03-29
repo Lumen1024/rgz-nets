@@ -37,6 +37,9 @@ char g_user_names[MAX_USERS][MAX_LOGIN_LEN];
 int  g_user_has_msg[MAX_USERS];
 int  g_user_count = 0;
 
+char g_member_names[MAX_MEMBERS][MAX_LOGIN_LEN];
+int  g_member_count = 0;
+
 ListMode g_list_mode     = LIST_MODE_CHATS;
 int      g_list_selected = 0;
 
@@ -164,6 +167,15 @@ void ui_set_chat_list(char **names, int count) {
     for (int i = 0; i < g_chat_count; i++)
         strncpy(g_chat_names[i], names[i], MAX_ROUTE_LEN - 1);
     g_list_selected = 0;
+    pthread_mutex_unlock(&g_ui_mutex);
+    draw_all();
+}
+
+void ui_set_member_list(char **names, int count) {
+    pthread_mutex_lock(&g_ui_mutex);
+    g_member_count = count < MAX_MEMBERS ? count : MAX_MEMBERS;
+    for (int i = 0; i < g_member_count; i++)
+        strncpy(g_member_names[i], names[i], MAX_LOGIN_LEN - 1);
     pthread_mutex_unlock(&g_ui_mutex);
     draw_all();
 }

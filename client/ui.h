@@ -3,7 +3,7 @@
 #include <protocol.h>
 
 // Right panel display modes
-typedef enum { LIST_MODE_CHATS = 0, LIST_MODE_USERS = 1 } ListMode;
+typedef enum { LIST_MODE_CHATS = 0, LIST_MODE_USERS = 1, LIST_MODE_MEMBERS = 2 } ListMode;
 
 void ui_init();
 void ui_destroy();
@@ -15,6 +15,7 @@ void ui_set_chat(const char *chat_name, Message *msgs, int count);
 void ui_set_chat_list(char **names, int count);
 // names: all server users; has_messages[i]: 1 if dialog exists, 0 if not
 void ui_set_user_list(char **names, int *has_messages, int count);
+void ui_set_member_list(char **names, int count);
 void ui_append_message(Message *msg);
 void ui_notify(const char *text);
 void ui_sys(const char *text); // write to system bar

@@ -47,6 +47,11 @@ extern char g_user_names[MAX_USERS][MAX_LOGIN_LEN];
 extern int  g_user_has_msg[MAX_USERS];
 extern int  g_user_count;
 
+// ─── Chat members state ───────────────────────────────────────────────────────
+#define MAX_MEMBERS 256
+extern char g_member_names[MAX_MEMBERS][MAX_LOGIN_LEN];
+extern int  g_member_count;
+
 // ─── Right panel mode ─────────────────────────────────────────────────────────
 extern ListMode g_list_mode;
 extern int      g_list_selected;

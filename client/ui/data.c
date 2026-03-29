@@ -114,6 +114,50 @@ void load_user_list(void) {
     free_response(&res);
 }
 
+// ─── Load members of current group chat ──────────────────────────────────────
+
+void load_member_list(void) {
+    // Only works for group chats (/chats/{name}/...)
+    if (strncmp(g_current_chat, "/chats/", 7) != 0) {
+        ui_set_member_list(NULL, 0);
+        return;
+    }
+    const char *p = g_current_chat + 7;
+    const char *slash = strchr(p, '/');
+    int len = slash ? (int)(slash - p) : (int)strlen(p);
+    char chat_name[MAX_ROUTE_LEN];
+    strncpy(chat_name, p, len);
+    chat_name[len] = '\0';
+
+    char route[MAX_ROUTE_LEN * 2];
+    snprintf(route, sizeof(route), "/chats/%s/users", chat_name);
+
+    Request req;
+    req.kind    = MSG_REQUEST;
+    req.type    = GET;
+    req.route   = route;
+    req.token   = (char *)actions_get_token();
+    req.content = NULL;
+
+    Response res = send_and_wait(req);
+    if (res.code != ERR_OK || !res.content) {
+        free_response(&res);
+        return;
+    }
+
+    char *names[MAX_MEMBERS];
+    int count = 0;
+    int arr_size = cJSON_GetArraySize(res.content);
+    for (int i = 0; i < arr_size && count < MAX_MEMBERS; i++) {
+        cJSON *item = cJSON_GetArrayItem(res.content, i);
+        if (cJSON_IsString(item))
+            names[count++] = item->valuestring;
+    }
+
+    ui_set_member_list(names, count);
+    free_response(&res);
+}
+
 // ─── Open selected item from the list panel ───────────────────────────────────
 
 void open_selected_item(void) {
@@ -124,7 +168,7 @@ void open_selected_item(void) {
         char route[CHAT_ROUTE_LEN];
         snprintf(route, sizeof(route), "/chats/%s/messages",
             g_chat_names[g_list_selected]);
-        g_active = PANEL_NONE;
+        g_active = PANEL_CHAT;
         g_focus  = PANEL_CHAT;
         load_chat_messages(route);
     } else {
@@ -136,7 +180,7 @@ void open_selected_item(void) {
         char route[MAX_ROUTE_LEN];
         snprintf(route, sizeof(route), "/users/%s/messages",
             g_user_names[g_list_selected]);
-        g_active = PANEL_NONE;
+        g_active = PANEL_CHAT;
         g_focus  = PANEL_CHAT;
         load_chat_messages(route);
     }

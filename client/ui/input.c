@@ -100,7 +100,10 @@ void ui_run(void) {
 
         // ── List panel active ────────────────────────────────────────────────
         if (g_active == PANEL_LIST) {
-            int count = (g_list_mode == LIST_MODE_CHATS) ? g_chat_count : g_user_count;
+            int count;
+            if (g_list_mode == LIST_MODE_CHATS)       count = g_chat_count;
+            else if (g_list_mode == LIST_MODE_USERS)  count = g_user_count;
+            else                                       count = g_member_count;
             switch (ch) {
                 case KEY_UP:
                     if (g_list_selected > 0) g_list_selected--;
@@ -109,18 +112,41 @@ void ui_run(void) {
                     if (g_list_selected < count - 1) g_list_selected++;
                     break;
                 case KEY_LEFT:
-                    g_list_mode     = LIST_MODE_CHATS;
-                    g_list_selected = 0;
-                    load_chat_list();
+                    // cycle: members -> users -> chats -> members ...
+                    if (g_list_mode == LIST_MODE_CHATS) {
+                        g_list_mode = LIST_MODE_MEMBERS;
+                        g_list_selected = 0;
+                        load_member_list();
+                    } else if (g_list_mode == LIST_MODE_USERS) {
+                        g_list_mode = LIST_MODE_CHATS;
+                        g_list_selected = 0;
+                        load_chat_list();
+                    } else {
+                        g_list_mode = LIST_MODE_USERS;
+                        g_list_selected = 0;
+                        load_user_list();
+                    }
                     break;
                 case KEY_RIGHT:
-                    g_list_mode     = LIST_MODE_USERS;
-                    g_list_selected = 0;
-                    load_user_list();
+                    // cycle: chats -> users -> members -> chats ...
+                    if (g_list_mode == LIST_MODE_CHATS) {
+                        g_list_mode = LIST_MODE_USERS;
+                        g_list_selected = 0;
+                        load_user_list();
+                    } else if (g_list_mode == LIST_MODE_USERS) {
+                        g_list_mode = LIST_MODE_MEMBERS;
+                        g_list_selected = 0;
+                        load_member_list();
+                    } else {
+                        g_list_mode = LIST_MODE_CHATS;
+                        g_list_selected = 0;
+                        load_chat_list();
+                    }
                     break;
                 case '\n':
                 case KEY_ENTER:
-                    open_selected_item();
+                    if (g_list_mode != LIST_MODE_MEMBERS)
+                        open_selected_item();
                     break;
                 case 27:
                     g_active = PANEL_NONE;
