@@ -11,41 +11,47 @@
 #include <stdio.h>
 
 // Token and login stored after successful login
-static char g_token[MAX_TOKEN_LEN]    = {0};
-static char g_login[MAX_LOGIN_LEN]    = {0};
+static char g_token[MAX_TOKEN_LEN] = {0};
+static char g_login[MAX_LOGIN_LEN] = {0};
 
-const char *actions_get_token(void) {
+const char *actions_get_token(void)
+{
     return g_token[0] ? g_token : NULL;
 }
 
-const char *actions_get_login(void) {
+const char *actions_get_login(void)
+{
     return g_login[0] ? g_login : NULL;
 }
 
-static Request make_req(RequestType type, const char *route, cJSON *content) {
+static Request make_req(RequestType type, const char *route, cJSON *content)
+{
     Request req;
-    req.kind    = MSG_REQUEST;
-    req.type    = type;
-    req.route   = (char *)route;
-    req.token   = g_token[0] ? g_token : NULL;
+    req.kind = MSG_REQUEST;
+    req.type = type;
+    req.route = (char *)route;
+    req.token = g_token[0] ? g_token : NULL;
     req.content = content;
     return req;
 }
 
-void *action_login(void *args) {
+void *action_login(void *args)
+{
     AuthArgs *a = (AuthArgs *)args;
 
     cJSON *body = cJSON_CreateObject();
-    cJSON_AddStringToObject(body, "login",    a->login);
+    cJSON_AddStringToObject(body, "login", a->login);
     cJSON_AddStringToObject(body, "password", a->password);
 
     Request req = make_req(POST, "/login", body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
-    if (res.code == ERR_OK && res.content) {
+    if (res.code == ERR_OK && res.content)
+    {
         cJSON *token_item = cJSON_GetObjectItemCaseSensitive(res.content, "token");
-        if (cJSON_IsString(token_item)) {
+        if (cJSON_IsString(token_item))
+        {
             strncpy(g_token, token_item->valuestring, MAX_TOKEN_LEN - 1);
         }
         strncpy(g_login, a->login, MAX_LOGIN_LEN - 1);
@@ -57,11 +63,12 @@ void *action_login(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
-void *action_register(void *args) {
+void *action_register(void *args)
+{
     AuthArgs *a = (AuthArgs *)args;
 
     cJSON *body = cJSON_CreateObject();
-    cJSON_AddStringToObject(body, "login",    a->login);
+    cJSON_AddStringToObject(body, "login", a->login);
     cJSON_AddStringToObject(body, "password", a->password);
 
     Request req = make_req(POST, "/register", body);
@@ -72,7 +79,8 @@ void *action_register(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
-void *action_send_message(void *args) {
+void *action_send_message(void *args)
+{
     SendMessageArgs *a = (SendMessageArgs *)args;
 
     cJSON *body = cJSON_CreateObject();
@@ -91,7 +99,8 @@ void *action_send_message(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
-void *action_create_chat(void *args) {
+void *action_create_chat(void *args)
+{
     CreateChatArgs *a = (CreateChatArgs *)args;
 
     cJSON *body = cJSON_CreateObject();
@@ -105,7 +114,8 @@ void *action_create_chat(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
-void *action_add_chat_user(void *args) {
+void *action_add_chat_user(void *args)
+{
     ChatUserArgs *a = (ChatUserArgs *)args;
 
     cJSON *body = cJSON_CreateObject();
@@ -122,7 +132,8 @@ void *action_add_chat_user(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
-void *action_remove_chat_user(void *args) {
+void *action_remove_chat_user(void *args)
+{
     ChatUserArgs *a = (ChatUserArgs *)args;
 
     cJSON *body = cJSON_CreateObject();
@@ -139,7 +150,8 @@ void *action_remove_chat_user(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
-void *action_leave_chat(void *args) {
+void *action_leave_chat(void *args)
+{
     LeaveChatArgs *a = (LeaveChatArgs *)args;
 
     // Use empty login — server will use token to identify the user
@@ -157,7 +169,8 @@ void *action_leave_chat(void *args) {
     return (void *)(intptr_t)res.code;
 }
 
-void *action_send_file(void *args) {
+void *action_send_file(void *args)
+{
     SendFileArgs *a = (SendFileArgs *)args;
 
     // Extract filename from path

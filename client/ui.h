@@ -3,7 +3,12 @@
 #include <protocol.h>
 
 // Right panel display modes
-typedef enum { LIST_MODE_CHATS = 0, LIST_MODE_USERS = 1, LIST_MODE_MEMBERS = 2 } ListMode;
+typedef enum
+{
+  LIST_MODE_CHATS = 0,
+  LIST_MODE_USERS = 1,
+  LIST_MODE_MEMBERS = 2
+} ListMode;
 
 void ui_init();
 void ui_destroy();
@@ -18,6 +23,6 @@ void ui_set_user_list(char **names, int *has_messages, int count);
 void ui_set_member_list(char **names, int count);
 void ui_append_message(Message *msg);
 void ui_notify(const char *text);
-void ui_sys(const char *text); // write to system bar
+void ui_sys(const char *text);         // write to system bar
 const char *ui_get_current_chat(void); // returns current open chat route
 void read_line(const char *prompt, char *out, int maxlen, int hidden);

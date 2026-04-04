@@ -2,13 +2,15 @@
 
 #include <stddef.h>
 
-typedef struct {
+typedef struct
+{
     char ip[64];
     int port;
     char filepath[512];
 } FtSendArgs;
 
-typedef struct {
+typedef struct
+{
     int port;
     char filename[256];
     size_t size;

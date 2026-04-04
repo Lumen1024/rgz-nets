@@ -1,29 +1,35 @@
 #pragma once
 
-typedef struct {
+typedef struct
+{
     char login[64];
     char password[64];
 } AuthArgs;
 
-typedef struct {
+typedef struct
+{
     char chat[256];
     char text[1024];
 } SendMessageArgs;
 
-typedef struct {
+typedef struct
+{
     char name[256];
 } CreateChatArgs;
 
-typedef struct {
+typedef struct
+{
     char chat[128];
     char login[64];
 } ChatUserArgs;
 
-typedef struct {
+typedef struct
+{
     char chat[128];
 } LeaveChatArgs;
 
-typedef struct {
+typedef struct
+{
     char to[64];
     char filepath[512];
 } SendFileArgs;

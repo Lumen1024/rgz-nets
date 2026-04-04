@@ -8,7 +8,6 @@
 #include <string.h>
 #include <locale.h>
 
-
 int main(int argc, char *argv[])
 {
     char host[64] = {0};
