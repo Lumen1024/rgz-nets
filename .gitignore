@@ -1,6 +1,7 @@
 .vscode
 .claude
 bin/
+docs/
 *.o
 *.a
 data/
