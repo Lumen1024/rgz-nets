@@ -4,4 +4,4 @@
 int utf8_backspace(char *buf, int len);
 
 // Main ncurses event loop. Returns when user presses 'q'.
-void ui_run(void);
+// Declared in ui.h — defined in ui/input.c

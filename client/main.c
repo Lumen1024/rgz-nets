@@ -56,10 +56,10 @@ int main(int argc, char *argv[])
     // 3. Auth: fast path from args, or interactive loop
     if (fast_login)
     {
-        AuthArgs args;
-        strncpy(args.login, login, sizeof(args.login) - 1);
-        strncpy(args.password, password, sizeof(args.password) - 1);
-        void *ret = action_login(&args);
+        void *ret = action_login(&(AuthArgs){
+            .login = login,
+            .password = password,
+        });
         if ((intptr_t)ret != 0)
         {
             fprintf(stderr, "Login failed (code %d).\n", (int)(intptr_t)ret);
@@ -81,10 +81,10 @@ int main(int argc, char *argv[])
             if (c == 1)
             {
                 ui_prompt_login(login, password);
-                AuthArgs args;
-                strncpy(args.login, login, sizeof(args.login) - 1);
-                strncpy(args.password, password, sizeof(args.password) - 1);
-                void *ret = action_login(&args);
+                void *ret = action_login(&(AuthArgs){
+                    .login = login,
+                    .password = password,
+                });
                 if ((intptr_t)ret == 0)
                     break;
                 printf("Login failed (code %d). Try again.\n", (int)(intptr_t)ret);
@@ -92,10 +92,11 @@ int main(int argc, char *argv[])
             else if (c == 2)
             {
                 ui_prompt_register(login, password);
-                AuthArgs args;
-                strncpy(args.login, login, sizeof(args.login) - 1);
-                strncpy(args.password, password, sizeof(args.password) - 1);
-                void *ret = action_register(&args);
+                void *ret = action_register(&(AuthArgs){
+                    .login = login,
+                    .password = password,
+                });
+
                 if ((intptr_t)ret == 0)
                 {
                     printf("Registered. Now log in.\n");
