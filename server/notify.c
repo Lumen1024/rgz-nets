@@ -59,7 +59,7 @@ static int g_child_pipe_write = -1;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-void notify_init(void) {
+void notify_init() {
     g_shared = mmap(NULL, sizeof(SharedClients),
                     PROT_READ | PROT_WRITE,
                     MAP_SHARED | MAP_ANONYMOUS, -1, 0);
@@ -208,7 +208,7 @@ static int find_client_fd(const char *login) {
 
 // ── Parent: poll pipes and forward notifications ──────────────────────────────
 
-void notify_dispatch(void) {
+void notify_dispatch() {
     if (g_parent_count == 0) return;
 
     fd_set rfds;

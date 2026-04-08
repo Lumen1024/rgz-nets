@@ -40,7 +40,7 @@ static void load_and_set_chat_messages(const char *route)
         ui_set_chat(route, msgs, count);
 }
 
-static void load_and_set_chat_list(void)
+static void load_and_set_chat_list()
 {
     char names[MAX_CHATS][MAX_ROUTE_LEN];
     int count = 0;
@@ -53,7 +53,7 @@ static void load_and_set_chat_list(void)
     }
 }
 
-static void load_and_set_user_list(void)
+static void load_and_set_user_list()
 {
     char names[MAX_USERS][MAX_LOGIN_LEN];
     int count = 0;
@@ -70,7 +70,7 @@ static void load_and_set_user_list(void)
     }
 }
 
-static void load_and_set_member_list(void)
+static void load_and_set_member_list()
 {
     if (strncmp(g_current_chat, "/chats/", 7) != 0)
     {
@@ -95,7 +95,7 @@ static void load_and_set_member_list(void)
     }
 }
 
-static void open_selected_item(void)
+static void open_selected_item()
 {
     int count = (g_list_mode == LIST_MODE_CHATS) ? g_chat_count : g_user_count;
     if (count == 0)
@@ -126,7 +126,7 @@ static void open_selected_item(void)
     }
 }
 
-void ui_run(void)
+void ui_run()
 {
     load_and_set_chat_list();
     load_and_set_user_list();

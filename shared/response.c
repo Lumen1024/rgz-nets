@@ -33,7 +33,7 @@ int parse_response(char *data, Response *response) {
 
     cJSON *code = cJSON_GetObjectItemCaseSensitive(json, "code");
     if (cJSON_IsNumber(code)) {
-        response->code = code->valueint;
+        response->code = (ErrorCode)code->valueint;
     }
 
     cJSON *content = cJSON_GetObjectItemCaseSensitive(json, "content");
@@ -53,7 +53,7 @@ void free_response(Response *response) {
     }
 }
 
-Response make_error(int code) {
+Response make_error(ErrorCode code) {
     Response r;
     r.kind = MSG_RESPONSE;
     r.code = code;
@@ -64,7 +64,7 @@ Response make_error(int code) {
 Response make_success(cJSON *content) {
     Response r;
     r.kind = MSG_RESPONSE;
-    r.code = 0;
+    r.code = ERR_OK;
     r.content = content;
     return r;
 }

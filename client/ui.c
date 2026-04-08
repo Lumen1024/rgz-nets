@@ -10,7 +10,7 @@
 #include <termios.h>
 #include <unistd.h>
 
-void ui_init(void)
+void ui_init()
 {
     set_escdelay(25);
     initscr();
@@ -44,7 +44,7 @@ void ui_init(void)
     refresh();
 }
 
-void ui_destroy(void)
+void ui_destroy()
 {
     if (g_win_chat_in) { delwin(g_win_chat_in); g_win_chat_in = NULL; }
     if (g_win_list_in) { delwin(g_win_list_in); g_win_list_in = NULL; }
@@ -187,7 +187,7 @@ void ui_sys(const char *text)
     doupdate();
 }
 
-const char *ui_get_current_chat(void)
+const char *ui_get_current_chat()
 {
     return g_current_chat[0] ? g_current_chat : NULL;
 }

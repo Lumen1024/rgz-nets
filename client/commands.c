@@ -25,12 +25,12 @@ static int current_chat_name(char *out, int maxlen)
     return 0;
 }
 
-static int is_private_chat(void)
+static int is_private_chat()
 {
     return strncmp(g_current_chat, "/users/", 7) == 0;
 }
 
-static void reload_chat_list(void)
+static void reload_chat_list()
 {
     char names[MAX_CHATS][MAX_ROUTE_LEN];
     int count = 0;
@@ -149,7 +149,7 @@ void handle_command(const char *cmd)
     ui_sys(arg);
 }
 
-void handle_sys_input(void)
+void handle_sys_input()
 {
     if (g_sys_input_len == 0)
         return;

@@ -3,6 +3,8 @@
 #include <protocol.h>
 #include <model.h>
 
+int connect_to_server(const char *host, int port);
+
 int api_get_chat_messages(const char *route, Message *msgs_out, int max, int *count_out);
 int api_get_chat_list(char names_out[][MAX_ROUTE_LEN], int max, int *count_out);
 int api_get_user_list(char names_out[][MAX_LOGIN_LEN], int max, int *count_out);

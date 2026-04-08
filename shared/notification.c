@@ -33,7 +33,7 @@ int parse_notification(char *data, Notification *notification) {
 
     cJSON *code = cJSON_GetObjectItemCaseSensitive(json, "code");
     if (cJSON_IsNumber(code)) {
-        notification->code = code->valueint;
+        notification->code = (NotifCode)code->valueint;
     }
 
     cJSON *content = cJSON_GetObjectItemCaseSensitive(json, "content");

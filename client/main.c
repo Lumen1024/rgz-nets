@@ -1,6 +1,6 @@
 #include <ui.h>
+#include <input.h>
 #include <api.h>
-#include <connection.h>
 
 #include <stdio.h>
 #include <stdlib.h>

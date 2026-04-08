@@ -12,7 +12,7 @@ int get_border_color(Panel panel)
     return CP_DEFAULT;
 }
 
-void draw_chat_panel(void)
+void draw_chat_panel()
 {
     int cp = get_border_color(PANEL_CHAT);
     wattron(g_win_chat, COLOR_PAIR(cp));
@@ -91,7 +91,7 @@ void draw_chat_panel(void)
     wnoutrefresh(g_win_chat_in);
 }
 
-void draw_list_panel(void)
+void draw_list_panel()
 {
     int cp = get_border_color(PANEL_LIST);
     wattron(g_win_list, COLOR_PAIR(cp));
@@ -165,7 +165,7 @@ void draw_list_panel(void)
     wnoutrefresh(g_win_list_in);
 }
 
-void draw_sys_bar(void)
+void draw_sys_bar()
 {
     int cp = get_border_color(PANEL_SYS);
     wattron(g_win_sys, COLOR_PAIR(cp));
@@ -199,7 +199,7 @@ void draw_sys_bar(void)
     wnoutrefresh(g_win_sys);
 }
 
-void draw_notify(void)
+void draw_notify()
 {
     if (!g_notify_text[0])
         return;
@@ -225,7 +225,7 @@ void draw_notify(void)
     delwin(w);
 }
 
-void draw_all(void)
+void draw_all()
 {
     pthread_mutex_lock(&g_ui_mutex);
     draw_chat_panel();

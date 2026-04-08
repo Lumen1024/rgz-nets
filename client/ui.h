@@ -3,9 +3,8 @@
 #include <protocol.h>
 #include <model.h>
 
-void ui_init(void);
-void ui_destroy(void);
-void ui_run(void);
+void ui_init();
+void ui_destroy();
 
 int  ui_prompt_server(char *host_out, int *port_out);
 int  ui_prompt_login(char *login_out, char *password_out);
@@ -20,4 +19,4 @@ void ui_append_message(Message *msg);
 
 void        ui_notify(const char *text);
 void        ui_sys(const char *text);
-const char *ui_get_current_chat(void);
+const char *ui_get_current_chat();

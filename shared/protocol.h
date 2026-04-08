@@ -12,6 +12,23 @@
 typedef enum { GET, POST, DELETE } RequestType;
 typedef enum { MSG_REQUEST, MSG_RESPONSE, MSG_NOTIFICATION } MessageKind;
 
+typedef enum {
+    ERR_OK           = 0,
+    ERR_BAD_REQUEST  = 1,
+    ERR_UNAUTHORIZED = 2,
+    ERR_NOT_FOUND    = 3,
+    ERR_FORBIDDEN    = 4,
+    ERR_CONFLICT     = 5,
+    ERR_INTERNAL     = 6,
+} ErrorCode;
+
+typedef enum {
+    NOTIF_NEW_MESSAGE   = 1,
+    NOTIF_FILE_REQUEST  = 2,
+    NOTIF_FILE_APPROVED = 3,
+    NOTIF_FILE_DECLINED = 4,
+} NotifCode;
+
 typedef struct {
     MessageKind kind;
     char *route;
@@ -22,13 +39,13 @@ typedef struct {
 
 typedef struct {
     MessageKind kind;
-    int code;
+    ErrorCode code;
     cJSON *content;
 } Response;
 
 typedef struct {
     MessageKind kind;
-    int code;
+    NotifCode code;
     cJSON *content;
 } Notification;
 
@@ -38,17 +55,4 @@ typedef struct {
     char timestamp[MAX_TIMESTAMP_LEN];
 } Message;
 
-// Error codes
-#define ERR_OK           0
-#define ERR_BAD_REQUEST  1
-#define ERR_UNAUTHORIZED 2
-#define ERR_NOT_FOUND    3
-#define ERR_FORBIDDEN    4
-#define ERR_CONFLICT     5
-#define ERR_INTERNAL     6
-
-// Notification codes
-#define NOTIF_NEW_MESSAGE      1
-#define NOTIF_FILE_REQUEST     2
-#define NOTIF_FILE_APPROVED    3
-#define NOTIF_FILE_DECLINED    4
+int parse_message_kind(const char *buf, MessageKind *kind_out);
