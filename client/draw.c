@@ -58,8 +58,8 @@ void draw_chat_panel()
     werase(g_win_chat_in);
 
     int visible = msg_h;
-    int total   = g_msg_count;
-    int start   = total - visible - g_msg_scroll;
+    int total = g_msg_count;
+    int start = total - visible - g_msg_scroll;
     if (start < 0)
         start = 0;
     int end = start + visible;

@@ -21,9 +21,9 @@
 static int g_socket_fd = -1;
 
 static pthread_mutex_t g_resp_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t  g_resp_cond  = PTHREAD_COND_INITIALIZER;
-static Response        g_pending_response;
-static int             g_response_ready = 0;
+static pthread_cond_t g_resp_cond = PTHREAD_COND_INITIALIZER;
+static Response g_pending_response;
+static int g_response_ready = 0;
 
 int connect_to_server(const char *host, int port)
 {
@@ -33,8 +33,8 @@ int connect_to_server(const char *host, int port)
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
-    addr.sin_family      = AF_INET;
-    addr.sin_port        = htons((uint16_t)port);
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons((uint16_t)port);
 
     if (inet_pton(AF_INET, host, &addr.sin_addr) <= 0)
     {
@@ -62,8 +62,8 @@ int connect_to_server(const char *host, int port)
 void reader_on_response(Response *res)
 {
     pthread_mutex_lock(&g_resp_mutex);
-    g_pending_response  = *res;
-    g_response_ready    = 1;
+    g_pending_response = *res;
+    g_response_ready = 1;
     pthread_cond_signal(&g_resp_cond);
     pthread_mutex_unlock(&g_resp_mutex);
 }
@@ -76,7 +76,7 @@ static Response send_and_wait(Request req)
 
     if (send_request(g_socket_fd, req) < 0)
     {
-        Response err = { .kind = MSG_RESPONSE, .code = ERR_INTERNAL, .content = NULL };
+        Response err = {.kind = MSG_RESPONSE, .code = ERR_INTERNAL, .content = NULL};
         return err;
     }
 
@@ -92,17 +92,17 @@ static Response send_and_wait(Request req)
 static Request make_req(RequestType type, const char *route, cJSON *content)
 {
     Request req;
-    req.kind    = MSG_REQUEST;
-    req.type    = type;
-    req.route   = (char *)route;
-    req.token   = g_token[0] ? g_token : NULL;
+    req.kind = MSG_REQUEST;
+    req.type = type;
+    req.route = (char *)route;
+    req.token = g_token[0] ? g_token : NULL;
     req.content = content;
     return req;
 }
 
 int api_get_chat_messages(const char *route, Message *msgs_out, int max, int *count_out)
 {
-    Request req  = make_req(GET, route, NULL);
+    Request req = make_req(GET, route, NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
@@ -110,7 +110,7 @@ int api_get_chat_messages(const char *route, Message *msgs_out, int max, int *co
         return res.code;
     }
 
-    int count    = 0;
+    int count = 0;
     int arr_size = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < max; i++)
     {
@@ -125,7 +125,7 @@ int api_get_chat_messages(const char *route, Message *msgs_out, int max, int *co
 
 int api_get_chat_list(char names_out[][MAX_ROUTE_LEN], int max, int *count_out)
 {
-    Request req  = make_req(GET, "/chats", NULL);
+    Request req = make_req(GET, "/chats", NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
@@ -133,7 +133,7 @@ int api_get_chat_list(char names_out[][MAX_ROUTE_LEN], int max, int *count_out)
         return res.code;
     }
 
-    int count    = 0;
+    int count = 0;
     int arr_size = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < max; i++)
     {
@@ -149,7 +149,7 @@ int api_get_chat_list(char names_out[][MAX_ROUTE_LEN], int max, int *count_out)
 
 int api_get_user_list(char names_out[][MAX_LOGIN_LEN], int max, int *count_out)
 {
-    Request req  = make_req(GET, "/users", NULL);
+    Request req = make_req(GET, "/users", NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
@@ -157,7 +157,7 @@ int api_get_user_list(char names_out[][MAX_LOGIN_LEN], int max, int *count_out)
         return res.code;
     }
 
-    int count    = 0;
+    int count = 0;
     int arr_size = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < max; i++)
     {
@@ -180,7 +180,7 @@ int api_get_member_list(const char *chat_name, char names_out[][MAX_LOGIN_LEN], 
     char route[MAX_ROUTE_LEN * 2];
     snprintf(route, sizeof(route), "/chats/%s/users", chat_name);
 
-    Request req  = make_req(GET, route, NULL);
+    Request req = make_req(GET, route, NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
@@ -188,7 +188,7 @@ int api_get_member_list(const char *chat_name, char names_out[][MAX_LOGIN_LEN], 
         return res.code;
     }
 
-    int count    = 0;
+    int count = 0;
     int arr_size = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < max; i++)
     {
@@ -208,7 +208,7 @@ int api_login(const char *login, const char *password)
     cJSON_AddStringToObject(body, "login", login);
     cJSON_AddStringToObject(body, "password", password);
 
-    Request req  = make_req(POST, "/login", body);
+    Request req = make_req(POST, "/login", body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
@@ -231,7 +231,7 @@ int api_register(const char *login, const char *password)
     cJSON_AddStringToObject(body, "login", login);
     cJSON_AddStringToObject(body, "password", password);
 
-    Request req  = make_req(POST, "/register", body);
+    Request req = make_req(POST, "/register", body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
@@ -245,7 +245,7 @@ int api_send_message(const char *route, const char *text)
     cJSON *body = cJSON_CreateObject();
     cJSON_AddStringToObject(body, "text", text);
 
-    Request req  = make_req(POST, route, body);
+    Request req = make_req(POST, route, body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
@@ -259,7 +259,7 @@ int api_create_chat(const char *name)
     cJSON *body = cJSON_CreateObject();
     cJSON_AddStringToObject(body, "name", name);
 
-    Request req  = make_req(POST, "/chats", body);
+    Request req = make_req(POST, "/chats", body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
@@ -276,7 +276,7 @@ int api_add_chat_user(const char *chat, const char *login)
     char route[MAX_ROUTE_LEN];
     snprintf(route, sizeof(route), "/chats/%s/users", chat);
 
-    Request req  = make_req(POST, route, body);
+    Request req = make_req(POST, route, body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
@@ -293,7 +293,7 @@ int api_remove_chat_user(const char *chat, const char *login)
     char route[MAX_ROUTE_LEN];
     snprintf(route, sizeof(route), "/chats/%s/users", chat);
 
-    Request req  = make_req(DELETE, route, body);
+    Request req = make_req(DELETE, route, body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
@@ -310,7 +310,7 @@ int api_leave_chat(const char *chat)
     char route[MAX_ROUTE_LEN];
     snprintf(route, sizeof(route), "/chats/%s/users", chat);
 
-    Request req  = make_req(DELETE, route, body);
+    Request req = make_req(DELETE, route, body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 
@@ -331,7 +331,7 @@ int api_send_file(const char *to, const char *filepath)
     char route[MAX_ROUTE_LEN];
     snprintf(route, sizeof(route), "/users/%s/files", to);
 
-    Request req  = make_req(POST, route, body);
+    Request req = make_req(POST, route, body);
     Response res = send_and_wait(req);
     cJSON_Delete(body);
 

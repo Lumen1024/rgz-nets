@@ -7,10 +7,10 @@
 #include <model.h>
 
 #define MAX_MESSAGES 512
-#define MAX_CHATS    128
-#define MAX_USERS    256
-#define MAX_MEMBERS  256
-#define MAX_SYS_MSG  512
+#define MAX_CHATS 128
+#define MAX_USERS 256
+#define MAX_MEMBERS 256
+#define MAX_SYS_MSG 512
 
 #define CHAT_ROUTE_LEN (MAX_ROUTE_LEN + 18)
 

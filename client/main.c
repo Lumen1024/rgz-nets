@@ -11,8 +11,8 @@
 int main(int argc, char *argv[])
 {
     char host[64] = {0};
-    int port      = 0;
-    char login[64]    = {0};
+    int port = 0;
+    char login[64] = {0};
     char password[64] = {0};
     int fast_login = 0;
 
