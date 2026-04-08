@@ -1,9 +1,9 @@
-#include "draw.h"
+#include <draw.h>
 
 #include <string.h>
 #include <stdio.h>
 
-int border_color(Panel panel)
+int get_border_color(Panel panel)
 {
     if (g_active == panel)
         return CP_ACTIVE;
@@ -14,7 +14,7 @@ int border_color(Panel panel)
 
 void draw_chat_panel(void)
 {
-    int cp = border_color(PANEL_CHAT);
+    int cp = get_border_color(PANEL_CHAT);
     wattron(g_win_chat, COLOR_PAIR(cp));
     box(g_win_chat, 0, 0);
 
@@ -58,8 +58,8 @@ void draw_chat_panel(void)
     werase(g_win_chat_in);
 
     int visible = msg_h;
-    int total = g_msg_count;
-    int start = total - visible - g_msg_scroll;
+    int total   = g_msg_count;
+    int start   = total - visible - g_msg_scroll;
     if (start < 0)
         start = 0;
     int end = start + visible;
@@ -93,22 +93,16 @@ void draw_chat_panel(void)
 
 void draw_list_panel(void)
 {
-    int cp = border_color(PANEL_LIST);
+    int cp = get_border_color(PANEL_LIST);
     wattron(g_win_list, COLOR_PAIR(cp));
     box(g_win_list, 0, 0);
 
     if (g_list_mode == LIST_MODE_CHATS)
-    {
         mvwprintw(g_win_list, 0, 2, " Chats [</>] ");
-    }
     else if (g_list_mode == LIST_MODE_USERS)
-    {
         mvwprintw(g_win_list, 0, 2, " Users [</>] ");
-    }
     else
-    {
         mvwprintw(g_win_list, 0, 2, " Members [</>] ");
-    }
     wattroff(g_win_list, COLOR_PAIR(cp));
 
     int inner_h, inner_w;
@@ -173,7 +167,7 @@ void draw_list_panel(void)
 
 void draw_sys_bar(void)
 {
-    int cp = border_color(PANEL_SYS);
+    int cp = get_border_color(PANEL_SYS);
     wattron(g_win_sys, COLOR_PAIR(cp));
     box(g_win_sys, 0, 0);
 

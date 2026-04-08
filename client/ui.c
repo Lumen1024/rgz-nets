@@ -1,7 +1,6 @@
 #include <ui.h>
-#include <ui/state.h>
-#include <ui/draw.h>
-#include <ui/input.h>
+#include <state.h>
+#include <draw.h>
 
 #include <ncurses.h>
 #include <pthread.h>
@@ -11,85 +10,34 @@
 #include <termios.h>
 #include <unistd.h>
 
-// panes
-WINDOW *g_win_chat = NULL;
-WINDOW *g_win_chat_in = NULL;
-WINDOW *g_win_list = NULL;
-WINDOW *g_win_list_in = NULL;
-WINDOW *g_win_sys = NULL;
-
-// sizes
-int g_rows = 0, g_cols = 0;
-int g_left_w = 0, g_right_w = 0;
-int g_main_h = 0;
-
-// current chat state
-Message g_messages[MAX_MESSAGES];
-int g_msg_count = 0;
-int g_msg_scroll = 0;
-char g_current_chat[MAX_ROUTE_LEN] = {0};
-char g_input[MAX_TEXT_LEN] = {0};
-int g_input_len = 0;
-
-// right panel states
-char g_chat_names[MAX_CHATS][MAX_ROUTE_LEN];
-int g_chat_count = 0;
-
-char g_user_names[MAX_USERS][MAX_LOGIN_LEN];
-int g_user_has_msg[MAX_USERS];
-int g_user_count = 0;
-
-char g_member_names[MAX_MEMBERS][MAX_LOGIN_LEN];
-int g_member_count = 0;
-
-ListMode g_list_mode = LIST_MODE_CHATS; // right panel variant
-int g_list_selected = 0;                // selected list index
-
-Panel g_focus = PANEL_CHAT;  // keyboard
-Panel g_active = PANEL_NONE; // highlight panel
-
-char g_sys_msg[MAX_SYS_MSG] = {0};
-char g_sys_input[MAX_TEXT_LEN] = {0};
-int g_sys_input_len = 0;
-SysState g_sys_state = SYS_IDLE;
-
-char g_notify_text[256] = {0};
-
-// ui mutex (for g_ vars)
-pthread_mutex_t g_ui_mutex = PTHREAD_MUTEX_INITIALIZER;
-
 void ui_init(void)
 {
-    set_escdelay(25); // esc fix
+    set_escdelay(25);
     initscr();
     cbreak();
     noecho();
     curs_set(0);
     keypad(stdscr, TRUE);
 
-    // bind text color - bg color
     start_color();
-    init_pair(CP_DEFAULT, COLOR_WHITE, COLOR_BLACK);
+    init_pair(CP_DEFAULT,  COLOR_WHITE,  COLOR_BLACK);
     init_pair(CP_SELECTED, COLOR_YELLOW, COLOR_BLACK);
-    init_pair(CP_ACTIVE, COLOR_GREEN, COLOR_BLACK);
-    init_pair(CP_NOTIFY, COLOR_BLACK, COLOR_YELLOW);
-    init_pair(CP_SYS, COLOR_CYAN, COLOR_BLACK);
-    init_pair(CP_DIM, COLOR_WHITE, COLOR_BLACK);
+    init_pair(CP_ACTIVE,   COLOR_GREEN,  COLOR_BLACK);
+    init_pair(CP_NOTIFY,   COLOR_BLACK,  COLOR_YELLOW);
+    init_pair(CP_SYS,      COLOR_CYAN,   COLOR_BLACK);
+    init_pair(CP_DIM,      COLOR_WHITE,  COLOR_BLACK);
 
-    // sizes
     getmaxyx(stdscr, g_rows, g_cols);
-    g_main_h = g_rows - SYS_BAR_H;
-    g_left_w = (g_cols * 7) / 10;
+    g_main_h  = g_rows - SYS_BAR_H;
+    g_left_w  = (g_cols * 7) / 10;
     g_right_w = g_cols - g_left_w;
 
-    // panels init
-    g_win_chat = newwin(g_main_h, g_left_w, 0, 0);
-    g_win_list = newwin(g_main_h, g_right_w, 0, g_left_w);
-    g_win_chat_in = newwin(g_main_h - 2, g_left_w - 2, 1, 1);
-    g_win_list_in = newwin(g_main_h - 2, g_right_w - 2, 1, g_left_w + 1);
-    g_win_sys = newwin(SYS_BAR_H, g_cols, g_main_h, 0);
+    g_win_chat    = newwin(g_main_h, g_left_w,       0,        0);
+    g_win_list    = newwin(g_main_h, g_right_w,      0,        g_left_w);
+    g_win_chat_in = newwin(g_main_h - 2, g_left_w  - 2, 1,    1);
+    g_win_list_in = newwin(g_main_h - 2, g_right_w - 2, 1,    g_left_w + 1);
+    g_win_sys     = newwin(SYS_BAR_H,   g_cols,     g_main_h, 0);
 
-    // hide innactive left panels
     scrollok(g_win_chat_in, FALSE);
     scrollok(g_win_list_in, FALSE);
 
@@ -98,31 +46,11 @@ void ui_init(void)
 
 void ui_destroy(void)
 {
-    if (g_win_chat_in)
-    {
-        delwin(g_win_chat_in);
-        g_win_chat_in = NULL;
-    }
-    if (g_win_list_in)
-    {
-        delwin(g_win_list_in);
-        g_win_list_in = NULL;
-    }
-    if (g_win_chat)
-    {
-        delwin(g_win_chat);
-        g_win_chat = NULL;
-    }
-    if (g_win_list)
-    {
-        delwin(g_win_list);
-        g_win_list = NULL;
-    }
-    if (g_win_sys)
-    {
-        delwin(g_win_sys);
-        g_win_sys = NULL;
-    }
+    if (g_win_chat_in) { delwin(g_win_chat_in); g_win_chat_in = NULL; }
+    if (g_win_list_in) { delwin(g_win_list_in); g_win_list_in = NULL; }
+    if (g_win_chat)    { delwin(g_win_chat);    g_win_chat    = NULL; }
+    if (g_win_list)    { delwin(g_win_list);    g_win_list    = NULL; }
+    if (g_win_sys)     { delwin(g_win_sys);     g_win_sys     = NULL; }
     endwin();
 }
 
@@ -187,7 +115,7 @@ void ui_set_chat(const char *chat_name, Message *msgs, int count)
 {
     pthread_mutex_lock(&g_ui_mutex);
     strncpy(g_current_chat, chat_name, MAX_ROUTE_LEN - 1);
-    g_msg_count = count < MAX_MESSAGES ? count : MAX_MESSAGES;
+    g_msg_count  = count < MAX_MESSAGES ? count : MAX_MESSAGES;
     g_msg_scroll = 0;
     for (int i = 0; i < g_msg_count; i++)
         g_messages[i] = msgs[i];
@@ -249,11 +177,6 @@ void ui_notify(const char *text)
     draw_all();
 }
 
-const char *ui_get_current_chat(void)
-{
-    return g_current_chat[0] ? g_current_chat : NULL;
-}
-
 void ui_sys(const char *text)
 {
     pthread_mutex_lock(&g_ui_mutex);
@@ -262,4 +185,9 @@ void ui_sys(const char *text)
     draw_sys_bar();
     wnoutrefresh(g_win_sys);
     doupdate();
+}
+
+const char *ui_get_current_chat(void)
+{
+    return g_current_chat[0] ? g_current_chat : NULL;
 }

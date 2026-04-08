@@ -1,6 +1,5 @@
-#include "data.h"
-#include "state.h"
-
+#include <api.h>
+#include <state.h>
 #include <ui.h>
 #include <actions.h>
 #include <connection.h>
@@ -13,15 +12,13 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-// ─── Load messages for a chat/dialog route ───────────────────────────────────
-
 void load_chat_messages(const char *route)
 {
     Request req;
-    req.kind = MSG_REQUEST;
-    req.type = GET;
-    req.route = (char *)route;
-    req.token = (char *)actions_get_token();
+    req.kind    = MSG_REQUEST;
+    req.type    = GET;
+    req.route   = (char *)route;
+    req.token   = (char *)actions_get_token();
     req.content = NULL;
 
     Response res = send_and_wait(req);
@@ -32,14 +29,14 @@ void load_chat_messages(const char *route)
     }
 
     Message msgs[MAX_MESSAGES];
-    int count = 0;
+    int count    = 0;
     int arr_size = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < MAX_MESSAGES; i++)
     {
         cJSON *item = cJSON_GetArrayItem(res.content, i);
-        cJSON *l = cJSON_GetObjectItemCaseSensitive(item, "login");
-        cJSON *t = cJSON_GetObjectItemCaseSensitive(item, "text");
-        cJSON *ts = cJSON_GetObjectItemCaseSensitive(item, "timestamp");
+        cJSON *l    = cJSON_GetObjectItemCaseSensitive(item, "login");
+        cJSON *t    = cJSON_GetObjectItemCaseSensitive(item, "text");
+        cJSON *ts   = cJSON_GetObjectItemCaseSensitive(item, "timestamp");
 
         memset(&msgs[count], 0, sizeof(Message));
         if (cJSON_IsString(l))
@@ -55,15 +52,13 @@ void load_chat_messages(const char *route)
     ui_set_chat(route, msgs, count);
 }
 
-// ─── Load list of group chats ─────────────────────────────────────────────────
-
 void load_chat_list(void)
 {
     Request req;
-    req.kind = MSG_REQUEST;
-    req.type = GET;
-    req.route = "/chats";
-    req.token = (char *)actions_get_token();
+    req.kind    = MSG_REQUEST;
+    req.type    = GET;
+    req.route   = "/chats";
+    req.token   = (char *)actions_get_token();
     req.content = NULL;
 
     Response res = send_and_wait(req);
@@ -74,30 +69,26 @@ void load_chat_list(void)
     }
 
     char *names[MAX_CHATS];
-    int count = 0;
+    int count    = 0;
     int arr_size = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < MAX_CHATS; i++)
     {
         cJSON *item = cJSON_GetArrayItem(res.content, i);
         if (cJSON_IsString(item))
-        {
             names[count++] = item->valuestring;
-        }
     }
 
     ui_set_chat_list(names, count);
     free_response(&res);
 }
 
-// ─── Load list of all users ───────────────────────────────────────────────────
-
 void load_user_list(void)
 {
     Request req;
-    req.kind = MSG_REQUEST;
-    req.type = GET;
-    req.route = "/users";
-    req.token = (char *)actions_get_token();
+    req.kind    = MSG_REQUEST;
+    req.type    = GET;
+    req.route   = "/users";
+    req.token   = (char *)actions_get_token();
     req.content = NULL;
 
     Response res = send_and_wait(req);
@@ -109,17 +100,17 @@ void load_user_list(void)
 
     char *names[MAX_USERS];
     int has_msg[MAX_USERS];
-    int count = 0;
-    const char *my_login = actions_get_login();
-    int arr_size = cJSON_GetArraySize(res.content);
+    int count        = 0;
+    const char *my   = actions_get_login();
+    int arr_size     = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < MAX_USERS; i++)
     {
         cJSON *item = cJSON_GetArrayItem(res.content, i);
         if (cJSON_IsString(item))
         {
-            if (my_login && strcmp(item->valuestring, my_login) == 0)
+            if (my && strcmp(item->valuestring, my) == 0)
                 continue;
-            names[count] = item->valuestring;
+            names[count]   = item->valuestring;
             has_msg[count] = 0;
             count++;
         }
@@ -129,17 +120,14 @@ void load_user_list(void)
     free_response(&res);
 }
 
-// ─── Load members of current group chat ──────────────────────────────────────
-
 void load_member_list(void)
 {
-    // Only works for group chats (/chats/{name}/...)
     if (strncmp(g_current_chat, "/chats/", 7) != 0)
     {
         ui_set_member_list(NULL, 0);
         return;
     }
-    const char *p = g_current_chat + 7;
+    const char *p     = g_current_chat + 7;
     const char *slash = strchr(p, '/');
     int len = slash ? (int)(slash - p) : (int)strlen(p);
     char chat_name[MAX_ROUTE_LEN];
@@ -150,10 +138,10 @@ void load_member_list(void)
     snprintf(route, sizeof(route), "/chats/%s/users", chat_name);
 
     Request req;
-    req.kind = MSG_REQUEST;
-    req.type = GET;
-    req.route = route;
-    req.token = (char *)actions_get_token();
+    req.kind    = MSG_REQUEST;
+    req.type    = GET;
+    req.route   = route;
+    req.token   = (char *)actions_get_token();
     req.content = NULL;
 
     Response res = send_and_wait(req);
@@ -164,7 +152,7 @@ void load_member_list(void)
     }
 
     char *names[MAX_MEMBERS];
-    int count = 0;
+    int count    = 0;
     int arr_size = cJSON_GetArraySize(res.content);
     for (int i = 0; i < arr_size && count < MAX_MEMBERS; i++)
     {
@@ -176,8 +164,6 @@ void load_member_list(void)
     ui_set_member_list(names, count);
     free_response(&res);
 }
-
-// ─── Open selected item from the list panel ───────────────────────────────────
 
 void open_selected_item(void)
 {
@@ -191,13 +177,13 @@ void open_selected_item(void)
         snprintf(route, sizeof(route), "/chats/%s/messages",
                  g_chat_names[g_list_selected]);
         g_active = PANEL_CHAT;
-        g_focus = PANEL_CHAT;
+        g_focus  = PANEL_CHAT;
         load_chat_messages(route);
     }
     else
     {
-        const char *my_login = actions_get_login();
-        if (my_login && strcmp(g_user_names[g_list_selected], my_login) == 0)
+        const char *my = actions_get_login();
+        if (my && strcmp(g_user_names[g_list_selected], my) == 0)
         {
             ui_sys("Cannot open dialog with yourself");
             return;
@@ -206,7 +192,7 @@ void open_selected_item(void)
         snprintf(route, sizeof(route), "/users/%s/messages",
                  g_user_names[g_list_selected]);
         g_active = PANEL_CHAT;
-        g_focus = PANEL_CHAT;
+        g_focus  = PANEL_CHAT;
         load_chat_messages(route);
     }
 }

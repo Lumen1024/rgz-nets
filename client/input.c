@@ -1,9 +1,8 @@
-#include "input.h"
-#include "state.h"
-#include "draw.h"
-#include "data.h"
-#include "commands.h"
-
+#include <input.h>
+#include <state.h>
+#include <draw.h>
+#include <api.h>
+#include <commands.h>
 #include <ui.h>
 #include <actions.h>
 #include <protocol.h>
@@ -34,7 +33,6 @@ void ui_run(void)
     int ch;
     while ((ch = getch()) != 'q')
     {
-        // Dismiss notification on any key
         if (g_notify_text[0])
         {
             g_notify_text[0] = '\0';
@@ -42,7 +40,6 @@ void ui_run(void)
             continue;
         }
 
-        // ── System bar active ────────────────────────────────────────────────
         if (g_active == PANEL_SYS)
         {
             switch (ch)
@@ -56,17 +53,17 @@ void ui_run(void)
             case 127:
                 g_sys_input_len = utf8_backspace(g_sys_input, g_sys_input_len);
                 break;
-            case 27: // Escape
-                g_sys_input[0] = '\0';
+            case 27:
+                g_sys_input[0]  = '\0';
                 g_sys_input_len = 0;
-                g_sys_state = SYS_IDLE;
-                g_active = PANEL_NONE;
+                g_sys_state     = SYS_IDLE;
+                g_active        = PANEL_NONE;
                 break;
             default:
                 if (ch >= 32 && g_sys_input_len < MAX_TEXT_LEN - 1)
                 {
                     g_sys_input[g_sys_input_len++] = (char)ch;
-                    g_sys_input[g_sys_input_len] = '\0';
+                    g_sys_input[g_sys_input_len]   = '\0';
                 }
                 break;
             }
@@ -74,7 +71,6 @@ void ui_run(void)
             continue;
         }
 
-        // ── No panel active: navigation ──────────────────────────────────────
         if (g_active == PANEL_NONE)
         {
             switch (ch)
@@ -100,7 +96,7 @@ void ui_run(void)
                 g_active = g_focus;
                 if (g_active == PANEL_SYS)
                 {
-                    g_sys_input[0] = '\0';
+                    g_sys_input[0]  = '\0';
                     g_sys_input_len = 0;
                 }
                 break;
@@ -111,7 +107,6 @@ void ui_run(void)
             continue;
         }
 
-        // ── List panel active ────────────────────────────────────────────────
         if (g_active == PANEL_LIST)
         {
             int count;
@@ -121,6 +116,7 @@ void ui_run(void)
                 count = g_user_count;
             else
                 count = g_member_count;
+
             switch (ch)
             {
             case KEY_UP:
@@ -132,43 +128,41 @@ void ui_run(void)
                     g_list_selected++;
                 break;
             case KEY_LEFT:
-                // cycle: members -> users -> chats -> members ...
                 if (g_list_mode == LIST_MODE_CHATS)
                 {
-                    g_list_mode = LIST_MODE_MEMBERS;
+                    g_list_mode     = LIST_MODE_MEMBERS;
                     g_list_selected = 0;
                     load_member_list();
                 }
                 else if (g_list_mode == LIST_MODE_USERS)
                 {
-                    g_list_mode = LIST_MODE_CHATS;
+                    g_list_mode     = LIST_MODE_CHATS;
                     g_list_selected = 0;
                     load_chat_list();
                 }
                 else
                 {
-                    g_list_mode = LIST_MODE_USERS;
+                    g_list_mode     = LIST_MODE_USERS;
                     g_list_selected = 0;
                     load_user_list();
                 }
                 break;
             case KEY_RIGHT:
-                // cycle: chats -> users -> members -> chats ...
                 if (g_list_mode == LIST_MODE_CHATS)
                 {
-                    g_list_mode = LIST_MODE_USERS;
+                    g_list_mode     = LIST_MODE_USERS;
                     g_list_selected = 0;
                     load_user_list();
                 }
                 else if (g_list_mode == LIST_MODE_USERS)
                 {
-                    g_list_mode = LIST_MODE_MEMBERS;
+                    g_list_mode     = LIST_MODE_MEMBERS;
                     g_list_selected = 0;
                     load_member_list();
                 }
                 else
                 {
-                    g_list_mode = LIST_MODE_CHATS;
+                    g_list_mode     = LIST_MODE_CHATS;
                     g_list_selected = 0;
                     load_chat_list();
                 }
@@ -188,7 +182,6 @@ void ui_run(void)
             continue;
         }
 
-        // ── Chat panel active ────────────────────────────────────────────────
         if (g_active == PANEL_CHAT)
         {
             switch (ch)
@@ -218,8 +211,8 @@ void ui_run(void)
                         pthread_create(&tid, NULL, action_send_message, a);
                         pthread_detach(tid);
                     }
-                    g_input[0] = '\0';
-                    g_input_len = 0;
+                    g_input[0]   = '\0';
+                    g_input_len  = 0;
                     g_msg_scroll = 0;
                 }
                 break;
@@ -234,7 +227,7 @@ void ui_run(void)
                 if (ch >= 32 && g_input_len < MAX_TEXT_LEN - 1)
                 {
                     g_input[g_input_len++] = (char)ch;
-                    g_input[g_input_len] = '\0';
+                    g_input[g_input_len]   = '\0';
                 }
                 break;
             }

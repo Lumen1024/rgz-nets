@@ -1,8 +1,8 @@
 #pragma once
 
-#include "state.h"
+#include <state.h>
 
-int border_color(Panel panel);
+int  get_border_color(Panel panel);
 void draw_chat_panel(void);
 void draw_list_panel(void);
 void draw_sys_bar(void);
