@@ -4,13 +4,22 @@
 #include <api.h>
 #include <commands.h>
 #include <ui.h>
-#include <actions.h>
 #include <protocol.h>
 
 #include <ncurses.h>
 #include <string.h>
 #include <stdlib.h>
 #include <pthread.h>
+
+typedef struct { char route[MAX_ROUTE_LEN]; char text[MAX_TEXT_LEN]; } SendArgs;
+
+static void *thread_send_message(void *arg)
+{
+    SendArgs *a = arg;
+    api_send_message(a->route, a->text);
+    free(a);
+    return NULL;
+}
 
 int utf8_backspace(char *buf, int len)
 {
@@ -23,10 +32,104 @@ int utf8_backspace(char *buf, int len)
     return i;
 }
 
+static void load_and_set_chat_messages(const char *route)
+{
+    Message msgs[MAX_MESSAGES];
+    int count = 0;
+    if (api_get_chat_messages(route, msgs, MAX_MESSAGES, &count) == ERR_OK)
+        ui_set_chat(route, msgs, count);
+}
+
+static void load_and_set_chat_list(void)
+{
+    char names[MAX_CHATS][MAX_ROUTE_LEN];
+    int count = 0;
+    if (api_get_chat_list(names, MAX_CHATS, &count) == ERR_OK)
+    {
+        char *ptrs[MAX_CHATS];
+        for (int i = 0; i < count; i++)
+            ptrs[i] = names[i];
+        ui_set_chat_list(ptrs, count);
+    }
+}
+
+static void load_and_set_user_list(void)
+{
+    char names[MAX_USERS][MAX_LOGIN_LEN];
+    int count = 0;
+    if (api_get_user_list(names, MAX_USERS, &count) == ERR_OK)
+    {
+        char *ptrs[MAX_USERS];
+        int has_msg[MAX_USERS];
+        for (int i = 0; i < count; i++)
+        {
+            ptrs[i]    = names[i];
+            has_msg[i] = 0;
+        }
+        ui_set_user_list(ptrs, has_msg, count);
+    }
+}
+
+static void load_and_set_member_list(void)
+{
+    if (strncmp(g_current_chat, "/chats/", 7) != 0)
+    {
+        ui_set_member_list(NULL, 0);
+        return;
+    }
+    const char *p     = g_current_chat + 7;
+    const char *slash = strchr(p, '/');
+    int len = slash ? (int)(slash - p) : (int)strlen(p);
+    char chat_name[MAX_ROUTE_LEN];
+    strncpy(chat_name, p, len);
+    chat_name[len] = '\0';
+
+    char names[MAX_MEMBERS][MAX_LOGIN_LEN];
+    int count = 0;
+    if (api_get_member_list(chat_name, names, MAX_MEMBERS, &count) == ERR_OK)
+    {
+        char *ptrs[MAX_MEMBERS];
+        for (int i = 0; i < count; i++)
+            ptrs[i] = names[i];
+        ui_set_member_list(ptrs, count);
+    }
+}
+
+static void open_selected_item(void)
+{
+    int count = (g_list_mode == LIST_MODE_CHATS) ? g_chat_count : g_user_count;
+    if (count == 0)
+        return;
+
+    if (g_list_mode == LIST_MODE_CHATS)
+    {
+        char route[CHAT_ROUTE_LEN];
+        snprintf(route, sizeof(route), "/chats/%s/messages",
+                 g_chat_names[g_list_selected]);
+        g_active = PANEL_CHAT;
+        g_focus  = PANEL_CHAT;
+        load_and_set_chat_messages(route);
+    }
+    else
+    {
+        if (g_login[0] && strcmp(g_user_names[g_list_selected], g_login) == 0)
+        {
+            ui_sys("Cannot open dialog with yourself");
+            return;
+        }
+        char route[MAX_ROUTE_LEN];
+        snprintf(route, sizeof(route), "/users/%s/messages",
+                 g_user_names[g_list_selected]);
+        g_active = PANEL_CHAT;
+        g_focus  = PANEL_CHAT;
+        load_and_set_chat_messages(route);
+    }
+}
+
 void ui_run(void)
 {
-    load_chat_list();
-    load_user_list();
+    load_and_set_chat_list();
+    load_and_set_user_list();
     clearok(stdscr, TRUE);
     draw_all();
 
@@ -132,19 +235,19 @@ void ui_run(void)
                 {
                     g_list_mode     = LIST_MODE_MEMBERS;
                     g_list_selected = 0;
-                    load_member_list();
+                    load_and_set_member_list();
                 }
                 else if (g_list_mode == LIST_MODE_USERS)
                 {
                     g_list_mode     = LIST_MODE_CHATS;
                     g_list_selected = 0;
-                    load_chat_list();
+                    load_and_set_chat_list();
                 }
                 else
                 {
                     g_list_mode     = LIST_MODE_USERS;
                     g_list_selected = 0;
-                    load_user_list();
+                    load_and_set_user_list();
                 }
                 break;
             case KEY_RIGHT:
@@ -152,19 +255,19 @@ void ui_run(void)
                 {
                     g_list_mode     = LIST_MODE_USERS;
                     g_list_selected = 0;
-                    load_user_list();
+                    load_and_set_user_list();
                 }
                 else if (g_list_mode == LIST_MODE_USERS)
                 {
                     g_list_mode     = LIST_MODE_MEMBERS;
                     g_list_selected = 0;
-                    load_member_list();
+                    load_and_set_member_list();
                 }
                 else
                 {
                     g_list_mode     = LIST_MODE_CHATS;
                     g_list_selected = 0;
-                    load_chat_list();
+                    load_and_set_chat_list();
                 }
                 break;
             case '\n':
@@ -204,11 +307,11 @@ void ui_run(void)
                     }
                     else
                     {
-                        SendMessageArgs *a = malloc(sizeof(SendMessageArgs));
-                        strncpy(a->chat, g_current_chat, sizeof(a->chat) - 1);
-                        strncpy(a->text, g_input, sizeof(a->text) - 1);
+                        SendArgs *a = malloc(sizeof(SendArgs));
+                        strncpy(a->route, g_current_chat, sizeof(a->route) - 1);
+                        strncpy(a->text,  g_input,        sizeof(a->text)  - 1);
                         pthread_t tid;
-                        pthread_create(&tid, NULL, action_send_message, a);
+                        pthread_create(&tid, NULL, thread_send_message, a);
                         pthread_detach(tid);
                     }
                     g_input[0]   = '\0';

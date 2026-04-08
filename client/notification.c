@@ -1,4 +1,5 @@
 #include <notification.h>
+#include <model.h>
 #include <ui.h>
 #include <protocol.h>
 
@@ -13,11 +14,9 @@ void handle_notification(Notification *notif)
         if (!content)
             return;
 
-        cJSON *login_item     = cJSON_GetObjectItemCaseSensitive(content, "login");
-        cJSON *text_item      = cJSON_GetObjectItemCaseSensitive(content, "text");
-        cJSON *timestamp_item = cJSON_GetObjectItemCaseSensitive(content, "timestamp");
-        cJSON *chat_item      = cJSON_GetObjectItemCaseSensitive(content, "chat");
-        cJSON *to_item        = cJSON_GetObjectItemCaseSensitive(content, "to");
+        cJSON *login_item = cJSON_GetObjectItemCaseSensitive(content, "login");
+        cJSON *chat_item  = cJSON_GetObjectItemCaseSensitive(content, "chat");
+        cJSON *to_item    = cJSON_GetObjectItemCaseSensitive(content, "to");
 
         char msg_route[MAX_ROUTE_LEN] = {0};
         if (cJSON_IsString(chat_item))
@@ -45,13 +44,7 @@ void handle_notification(Notification *notif)
                          strcmp(current_chat, msg_route) == 0;
 
         Message msg;
-        memset(&msg, 0, sizeof(msg));
-        if (cJSON_IsString(login_item))
-            strncpy(msg.login, login_item->valuestring, MAX_LOGIN_LEN - 1);
-        if (cJSON_IsString(text_item))
-            strncpy(msg.text, text_item->valuestring, MAX_TEXT_LEN - 1);
-        if (cJSON_IsString(timestamp_item))
-            strncpy(msg.timestamp, timestamp_item->valuestring, MAX_TIMESTAMP_LEN - 1);
+        message_from_json(content, &msg);
 
         if (is_current)
         {

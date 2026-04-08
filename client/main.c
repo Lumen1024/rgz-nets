@@ -1,6 +1,6 @@
 #include <ui.h>
+#include <api.h>
 #include <connection.h>
-#include <actions.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,14 +11,13 @@
 int main(int argc, char *argv[])
 {
     char host[64] = {0};
-    int port = 0;
-    char login[64] = {0};
+    int port      = 0;
+    char login[64]    = {0};
     char password[64] = {0};
     int fast_login = 0;
 
     if (argc >= 3)
     {
-        // Parse host:port
         char addr[128];
         strncpy(addr, argv[1], sizeof(addr) - 1);
         char *colon = strrchr(addr, ':');
@@ -41,11 +40,9 @@ int main(int argc, char *argv[])
 
     setlocale(LC_ALL, "");
 
-    // 1. Ask for server address (if not provided via args)
     if (!fast_login)
         ui_prompt_server(host, &port);
 
-    // 2. Connect
     int fd = connect_to_server(host, port);
     if (fd < 0)
     {
@@ -53,16 +50,11 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // 3. Auth: fast path from args, or interactive loop
     if (fast_login)
     {
-        void *ret = action_login(&(AuthArgs){
-            .login = login,
-            .password = password,
-        });
-        if ((intptr_t)ret != 0)
+        if (api_login(login, password) != ERR_OK)
         {
-            fprintf(stderr, "Login failed (code %d).\n", (int)(intptr_t)ret);
+            fprintf(stderr, "Login failed.\n");
             return 1;
         }
     }
@@ -81,35 +73,21 @@ int main(int argc, char *argv[])
             if (c == 1)
             {
                 ui_prompt_login(login, password);
-                void *ret = action_login(&(AuthArgs){
-                    .login = login,
-                    .password = password,
-                });
-                if ((intptr_t)ret == 0)
+                if (api_login(login, password) == ERR_OK)
                     break;
-                printf("Login failed (code %d). Try again.\n", (int)(intptr_t)ret);
+                printf("Login failed. Try again.\n");
             }
             else if (c == 2)
             {
                 ui_prompt_register(login, password);
-                void *ret = action_register(&(AuthArgs){
-                    .login = login,
-                    .password = password,
-                });
-
-                if ((intptr_t)ret == 0)
-                {
+                if (api_register(login, password) == ERR_OK)
                     printf("Registered. Now log in.\n");
-                }
                 else
-                {
-                    printf("Registration failed (code %d).\n", (int)(intptr_t)ret);
-                }
+                    printf("Registration failed.\n");
             }
         }
     }
 
-    // 4. Launch ncurses UI
     ui_init();
     ui_run();
     ui_destroy();

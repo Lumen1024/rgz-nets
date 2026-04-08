@@ -55,3 +55,6 @@ extern SysState g_sys_state;
 extern char g_notify_text[256];
 
 extern pthread_mutex_t g_ui_mutex;
+
+extern char g_token[MAX_TOKEN_LEN];
+extern char g_login[MAX_LOGIN_LEN];

@@ -41,3 +41,6 @@ SysState g_sys_state = SYS_IDLE;
 char g_notify_text[256] = {0};
 
 pthread_mutex_t g_ui_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+char g_token[MAX_TOKEN_LEN] = {0};
+char g_login[MAX_LOGIN_LEN] = {0};

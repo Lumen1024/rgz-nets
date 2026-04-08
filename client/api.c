@@ -1,7 +1,6 @@
 #include <api.h>
+#include <model.h>
 #include <state.h>
-#include <ui.h>
-#include <actions.h>
 #include <connection.h>
 #include <request.h>
 #include <response.h>
@@ -9,190 +8,255 @@
 #include <cJSON.h>
 
 #include <string.h>
-#include <stdlib.h>
 #include <stdio.h>
 
-void load_chat_messages(const char *route)
+static Request make_req(RequestType type, const char *route, cJSON *content)
 {
     Request req;
     req.kind    = MSG_REQUEST;
-    req.type    = GET;
+    req.type    = type;
     req.route   = (char *)route;
-    req.token   = (char *)actions_get_token();
-    req.content = NULL;
+    req.token   = g_token[0] ? g_token : NULL;
+    req.content = content;
+    return req;
+}
 
+int api_get_chat_messages(const char *route, Message *msgs_out, int max, int *count_out)
+{
+    Request req  = make_req(GET, route, NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
         free_response(&res);
-        return;
+        return res.code;
     }
 
-    Message msgs[MAX_MESSAGES];
     int count    = 0;
     int arr_size = cJSON_GetArraySize(res.content);
-    for (int i = 0; i < arr_size && count < MAX_MESSAGES; i++)
+    for (int i = 0; i < arr_size && count < max; i++)
     {
-        cJSON *item = cJSON_GetArrayItem(res.content, i);
-        cJSON *l    = cJSON_GetObjectItemCaseSensitive(item, "login");
-        cJSON *t    = cJSON_GetObjectItemCaseSensitive(item, "text");
-        cJSON *ts   = cJSON_GetObjectItemCaseSensitive(item, "timestamp");
-
-        memset(&msgs[count], 0, sizeof(Message));
-        if (cJSON_IsString(l))
-            strncpy(msgs[count].login, l->valuestring, MAX_LOGIN_LEN - 1);
-        if (cJSON_IsString(t))
-            strncpy(msgs[count].text, t->valuestring, MAX_TEXT_LEN - 1);
-        if (cJSON_IsString(ts))
-            strncpy(msgs[count].timestamp, ts->valuestring, MAX_TIMESTAMP_LEN - 1);
+        message_from_json(cJSON_GetArrayItem(res.content, i), &msgs_out[count]);
         count++;
     }
 
+    *count_out = count;
     free_response(&res);
-    ui_set_chat(route, msgs, count);
+    return ERR_OK;
 }
 
-void load_chat_list(void)
+int api_get_chat_list(char names_out[][MAX_ROUTE_LEN], int max, int *count_out)
 {
-    Request req;
-    req.kind    = MSG_REQUEST;
-    req.type    = GET;
-    req.route   = "/chats";
-    req.token   = (char *)actions_get_token();
-    req.content = NULL;
-
+    Request req  = make_req(GET, "/chats", NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
         free_response(&res);
-        return;
+        return res.code;
     }
 
-    char *names[MAX_CHATS];
     int count    = 0;
     int arr_size = cJSON_GetArraySize(res.content);
-    for (int i = 0; i < arr_size && count < MAX_CHATS; i++)
+    for (int i = 0; i < arr_size && count < max; i++)
     {
         cJSON *item = cJSON_GetArrayItem(res.content, i);
         if (cJSON_IsString(item))
-            names[count++] = item->valuestring;
+            strncpy(names_out[count++], item->valuestring, MAX_ROUTE_LEN - 1);
     }
 
-    ui_set_chat_list(names, count);
+    *count_out = count;
     free_response(&res);
+    return ERR_OK;
 }
 
-void load_user_list(void)
+int api_get_user_list(char names_out[][MAX_LOGIN_LEN], int max, int *count_out)
 {
-    Request req;
-    req.kind    = MSG_REQUEST;
-    req.type    = GET;
-    req.route   = "/users";
-    req.token   = (char *)actions_get_token();
-    req.content = NULL;
-
+    Request req  = make_req(GET, "/users", NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
         free_response(&res);
-        return;
+        return res.code;
     }
 
-    char *names[MAX_USERS];
-    int has_msg[MAX_USERS];
-    int count        = 0;
-    const char *my   = actions_get_login();
-    int arr_size     = cJSON_GetArraySize(res.content);
-    for (int i = 0; i < arr_size && count < MAX_USERS; i++)
+    int count    = 0;
+    int arr_size = cJSON_GetArraySize(res.content);
+    for (int i = 0; i < arr_size && count < max; i++)
     {
         cJSON *item = cJSON_GetArrayItem(res.content, i);
         if (cJSON_IsString(item))
         {
-            if (my && strcmp(item->valuestring, my) == 0)
+            if (g_login[0] && strcmp(item->valuestring, g_login) == 0)
                 continue;
-            names[count]   = item->valuestring;
-            has_msg[count] = 0;
-            count++;
+            strncpy(names_out[count++], item->valuestring, MAX_LOGIN_LEN - 1);
         }
     }
 
-    ui_set_user_list(names, has_msg, count);
+    *count_out = count;
     free_response(&res);
+    return ERR_OK;
 }
 
-void load_member_list(void)
+int api_get_member_list(const char *chat_name, char names_out[][MAX_LOGIN_LEN], int max, int *count_out)
 {
-    if (strncmp(g_current_chat, "/chats/", 7) != 0)
-    {
-        ui_set_member_list(NULL, 0);
-        return;
-    }
-    const char *p     = g_current_chat + 7;
-    const char *slash = strchr(p, '/');
-    int len = slash ? (int)(slash - p) : (int)strlen(p);
-    char chat_name[MAX_ROUTE_LEN];
-    strncpy(chat_name, p, len);
-    chat_name[len] = '\0';
-
     char route[MAX_ROUTE_LEN * 2];
     snprintf(route, sizeof(route), "/chats/%s/users", chat_name);
 
-    Request req;
-    req.kind    = MSG_REQUEST;
-    req.type    = GET;
-    req.route   = route;
-    req.token   = (char *)actions_get_token();
-    req.content = NULL;
-
+    Request req  = make_req(GET, route, NULL);
     Response res = send_and_wait(req);
     if (res.code != ERR_OK || !res.content)
     {
         free_response(&res);
-        return;
+        return res.code;
     }
 
-    char *names[MAX_MEMBERS];
     int count    = 0;
     int arr_size = cJSON_GetArraySize(res.content);
-    for (int i = 0; i < arr_size && count < MAX_MEMBERS; i++)
+    for (int i = 0; i < arr_size && count < max; i++)
     {
         cJSON *item = cJSON_GetArrayItem(res.content, i);
         if (cJSON_IsString(item))
-            names[count++] = item->valuestring;
+            strncpy(names_out[count++], item->valuestring, MAX_LOGIN_LEN - 1);
     }
 
-    ui_set_member_list(names, count);
+    *count_out = count;
     free_response(&res);
+    return ERR_OK;
 }
 
-void open_selected_item(void)
+int api_login(const char *login, const char *password)
 {
-    int count = (g_list_mode == LIST_MODE_CHATS) ? g_chat_count : g_user_count;
-    if (count == 0)
-        return;
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", login);
+    cJSON_AddStringToObject(body, "password", password);
 
-    if (g_list_mode == LIST_MODE_CHATS)
+    Request req  = make_req(POST, "/login", body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    if (res.code == ERR_OK && res.content)
     {
-        char route[CHAT_ROUTE_LEN];
-        snprintf(route, sizeof(route), "/chats/%s/messages",
-                 g_chat_names[g_list_selected]);
-        g_active = PANEL_CHAT;
-        g_focus  = PANEL_CHAT;
-        load_chat_messages(route);
+        cJSON *token_item = cJSON_GetObjectItemCaseSensitive(res.content, "token");
+        if (cJSON_IsString(token_item))
+            strncpy(g_token, token_item->valuestring, MAX_TOKEN_LEN - 1);
+        strncpy(g_login, login, MAX_LOGIN_LEN - 1);
     }
-    else
-    {
-        const char *my = actions_get_login();
-        if (my && strcmp(g_user_names[g_list_selected], my) == 0)
-        {
-            ui_sys("Cannot open dialog with yourself");
-            return;
-        }
-        char route[MAX_ROUTE_LEN];
-        snprintf(route, sizeof(route), "/users/%s/messages",
-                 g_user_names[g_list_selected]);
-        g_active = PANEL_CHAT;
-        g_focus  = PANEL_CHAT;
-        load_chat_messages(route);
-    }
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
+int api_register(const char *login, const char *password)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", login);
+    cJSON_AddStringToObject(body, "password", password);
+
+    Request req  = make_req(POST, "/register", body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
+int api_send_message(const char *route, const char *text)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "text", text);
+
+    Request req  = make_req(POST, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
+int api_create_chat(const char *name)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "name", name);
+
+    Request req  = make_req(POST, "/chats", body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
+int api_add_chat_user(const char *chat, const char *login)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", login);
+
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/chats/%s/users", chat);
+
+    Request req  = make_req(POST, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
+int api_remove_chat_user(const char *chat, const char *login)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", login);
+
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/chats/%s/users", chat);
+
+    Request req  = make_req(DELETE, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
+int api_leave_chat(const char *chat)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", "");
+
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/chats/%s/users", chat);
+
+    Request req  = make_req(DELETE, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
+int api_send_file(const char *to, const char *filepath)
+{
+    const char *filename = strrchr(filepath, '/');
+    filename = filename ? filename + 1 : filepath;
+
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "filename", filename);
+    cJSON_AddNumberToObject(body, "size", 0);
+
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/users/%s/files", to);
+
+    Request req  = make_req(POST, route, body);
+    Response res = send_and_wait(req);
+    cJSON_Delete(body);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
 }

@@ -2,7 +2,6 @@
 #include <state.h>
 #include <api.h>
 #include <ui.h>
-#include <actions.h>
 #include <protocol.h>
 
 #include <string.h>
@@ -31,23 +30,73 @@ static int is_private_chat(void)
     return strncmp(g_current_chat, "/users/", 7) == 0;
 }
 
+static void reload_chat_list(void)
+{
+    char names[MAX_CHATS][MAX_ROUTE_LEN];
+    int count = 0;
+    if (api_get_chat_list(names, MAX_CHATS, &count) == ERR_OK)
+    {
+        char *ptrs[MAX_CHATS];
+        for (int i = 0; i < count; i++)
+            ptrs[i] = names[i];
+        ui_set_chat_list(ptrs, count);
+    }
+}
+
+typedef struct { char chat[MAX_ROUTE_LEN]; char login[MAX_LOGIN_LEN]; } AddUserArgs;
+typedef struct { char chat[MAX_ROUTE_LEN]; char login[MAX_LOGIN_LEN]; } RemoveUserArgs;
+typedef struct { char chat[MAX_ROUTE_LEN]; } LeaveArgs;
+typedef struct { char name[MAX_ROUTE_LEN]; } CreateArgs;
+
+static void *thread_create_chat(void *arg)
+{
+    CreateArgs *a = arg;
+    api_create_chat(a->name);
+    free(a);
+    return NULL;
+}
+
+static void *thread_add_user(void *arg)
+{
+    AddUserArgs *a = arg;
+    api_add_chat_user(a->chat, a->login);
+    free(a);
+    return NULL;
+}
+
+static void *thread_remove_user(void *arg)
+{
+    RemoveUserArgs *a = arg;
+    api_remove_chat_user(a->chat, a->login);
+    free(a);
+    return NULL;
+}
+
+static void *thread_leave_chat(void *arg)
+{
+    LeaveArgs *a = arg;
+    api_leave_chat(a->chat);
+    free(a);
+    return NULL;
+}
+
 void handle_command(const char *cmd)
 {
     char arg[MAX_SYS_MSG];
     char chat[MAX_ROUTE_LEN];
+    pthread_t tid;
 
     if (strncmp(cmd, "/create ", 8) == 0)
     {
         const char *name = cmd + 8;
         if (!name[0]) { ui_sys("Usage: /create <chatname>"); return; }
-        CreateChatArgs *a = malloc(sizeof(CreateChatArgs));
+        CreateArgs *a = malloc(sizeof(CreateArgs));
         strncpy(a->name, name, sizeof(a->name) - 1);
-        pthread_t tid;
-        pthread_create(&tid, NULL, action_create_chat, a);
+        pthread_create(&tid, NULL, thread_create_chat, a);
         pthread_detach(tid);
         snprintf(arg, sizeof(arg), "Creating chat '%s'...", name);
         ui_sys(arg);
-        load_chat_list();
+        reload_chat_list();
         return;
     }
 
@@ -55,16 +104,11 @@ void handle_command(const char *cmd)
     {
         const char *login = cmd + 5;
         if (!login[0]) { ui_sys("Usage: /add <username>"); return; }
-        if (!current_chat_name(chat, sizeof(chat)))
-        {
-            ui_sys("Error: not in a group chat");
-            return;
-        }
-        ChatUserArgs *a = malloc(sizeof(ChatUserArgs));
+        if (!current_chat_name(chat, sizeof(chat))) { ui_sys("Error: not in a group chat"); return; }
+        AddUserArgs *a = malloc(sizeof(AddUserArgs));
         strncpy(a->chat, chat, sizeof(a->chat) - 1);
         strncpy(a->login, login, sizeof(a->login) - 1);
-        pthread_t tid;
-        pthread_create(&tid, NULL, action_add_chat_user, a);
+        pthread_create(&tid, NULL, thread_add_user, a);
         pthread_detach(tid);
         snprintf(arg, sizeof(arg), "Adding '%s' to '%s'...", login, chat);
         ui_sys(arg);
@@ -75,16 +119,11 @@ void handle_command(const char *cmd)
     {
         const char *login = cmd + 8;
         if (!login[0]) { ui_sys("Usage: /delete <username>"); return; }
-        if (!current_chat_name(chat, sizeof(chat)))
-        {
-            ui_sys("Error: not in a group chat");
-            return;
-        }
-        ChatUserArgs *a = malloc(sizeof(ChatUserArgs));
+        if (!current_chat_name(chat, sizeof(chat))) { ui_sys("Error: not in a group chat"); return; }
+        RemoveUserArgs *a = malloc(sizeof(RemoveUserArgs));
         strncpy(a->chat, chat, sizeof(a->chat) - 1);
         strncpy(a->login, login, sizeof(a->login) - 1);
-        pthread_t tid;
-        pthread_create(&tid, NULL, action_remove_chat_user, a);
+        pthread_create(&tid, NULL, thread_remove_user, a);
         pthread_detach(tid);
         snprintf(arg, sizeof(arg), "Removing '%s' from '%s'...", login, chat);
         ui_sys(arg);
@@ -94,19 +133,14 @@ void handle_command(const char *cmd)
     if (strcmp(cmd, "/leave") == 0)
     {
         if (is_private_chat()) { ui_sys("Error: cannot leave a private dialog"); return; }
-        if (!current_chat_name(chat, sizeof(chat)))
-        {
-            ui_sys("Error: not in a group chat");
-            return;
-        }
-        LeaveChatArgs *a = malloc(sizeof(LeaveChatArgs));
+        if (!current_chat_name(chat, sizeof(chat))) { ui_sys("Error: not in a group chat"); return; }
+        LeaveArgs *a = malloc(sizeof(LeaveArgs));
         strncpy(a->chat, chat, sizeof(a->chat) - 1);
-        pthread_t tid;
-        pthread_create(&tid, NULL, action_leave_chat, a);
+        pthread_create(&tid, NULL, thread_leave_chat, a);
         pthread_detach(tid);
         g_current_chat[0] = '\0';
         g_msg_count       = 0;
-        load_chat_list();
+        reload_chat_list();
         ui_sys("Left the chat.");
         return;
     }
