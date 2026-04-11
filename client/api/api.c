@@ -3,6 +3,7 @@
 #include <state.h>
 #include <request.h>
 #include <response.h>
+#include <notification.h>
 #include <socket_utils.h>
 #include <protocol.h>
 #include <cJSON.h>
@@ -16,14 +17,54 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 
-#include <reader.h>
-
 static int g_socket_fd = -1;
 
 static pthread_mutex_t g_resp_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t g_resp_cond = PTHREAD_COND_INITIALIZER;
-static Response g_pending_response;
-static int g_response_ready = 0;
+static pthread_cond_t  g_resp_cond  = PTHREAD_COND_INITIALIZER;
+static Response        g_pending_response;
+static int             g_response_ready = 0;
+
+static void reader_on_response(Response *res)
+{
+    pthread_mutex_lock(&g_resp_mutex);
+    g_pending_response = *res;
+    g_response_ready   = 1;
+    pthread_cond_signal(&g_resp_cond);
+    pthread_mutex_unlock(&g_resp_mutex);
+}
+
+static void *reader_thread(void *arg)
+{
+    int fd = *(int *)arg;
+    free(arg);
+
+    char buffer[MSG_BUFFER_SIZE];
+
+    while (read_message(fd, buffer, sizeof(buffer)) == 0)
+    {
+        MessageKind kind;
+        if (parse_message_kind(buffer, &kind) != 0)
+            continue;
+
+        if (kind == MSG_RESPONSE)
+        {
+            Response res;
+            if (parse_response(buffer, &res) == 0)
+                reader_on_response(&res);
+        }
+        else if (kind == MSG_NOTIFICATION)
+        {
+            Notification notif;
+            if (parse_notification(buffer, &notif) == 0)
+            {
+                handle_notification(&notif);
+                free_notification(&notif);
+            }
+        }
+    }
+
+    return NULL;
+}
 
 int connect_to_server(const char *host, int port)
 {
@@ -34,7 +75,7 @@ int connect_to_server(const char *host, int port)
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port = htons((uint16_t)port);
+    addr.sin_port   = htons((uint16_t)port);
 
     if (inet_pton(AF_INET, host, &addr.sin_addr) <= 0)
     {
@@ -57,15 +98,6 @@ int connect_to_server(const char *host, int port)
     pthread_detach(tid);
 
     return fd;
-}
-
-void reader_on_response(Response *res)
-{
-    pthread_mutex_lock(&g_resp_mutex);
-    g_pending_response = *res;
-    g_response_ready = 1;
-    pthread_cond_signal(&g_resp_cond);
-    pthread_mutex_unlock(&g_resp_mutex);
 }
 
 static Response send_and_wait(Request req)
@@ -200,6 +232,11 @@ int api_get_member_list(const char *chat_name, char names_out[][MAX_LOGIN_LEN], 
     *count_out = count;
     free_response(&res);
     return ERR_OK;
+}
+
+const char *api_get_login()
+{
+    return g_login[0] ? g_login : NULL;
 }
 
 int api_login(const char *login, const char *password)

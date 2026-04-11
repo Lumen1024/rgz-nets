@@ -1,9 +1,7 @@
 #include <input.h>
-#include <state.h>
-#include <draw.h>
+#include <ui.h>
 #include <api.h>
 #include <commands.h>
-#include <ui.h>
 #include <protocol.h>
 
 #include <ncurses.h>
@@ -23,17 +21,6 @@ static void *thread_send_message(void *arg)
     api_send_message(a->route, a->text);
     free(a);
     return NULL;
-}
-
-int utf8_backspace(char *buf, int len)
-{
-    if (len <= 0)
-        return 0;
-    int i = len - 1;
-    while (i > 0 && (buf[i] & 0xC0) == 0x80)
-        i--;
-    buf[i] = '\0';
-    return i;
 }
 
 static void load_and_set_chat_messages(const char *route)
@@ -67,7 +54,7 @@ static void load_and_set_user_list()
         int has_msg[MAX_USERS];
         for (int i = 0; i < count; i++)
         {
-            ptrs[i] = names[i];
+            ptrs[i]    = names[i];
             has_msg[i] = 0;
         }
         ui_set_user_list(ptrs, has_msg, count);
@@ -76,12 +63,13 @@ static void load_and_set_user_list()
 
 static void load_and_set_member_list()
 {
-    if (strncmp(g_current_chat, "/chats/", 7) != 0)
+    const char *chat = ui_get_current_chat();
+    if (!chat || strncmp(chat, "/chats/", 7) != 0)
     {
         ui_set_member_list(NULL, 0);
         return;
     }
-    const char *p = g_current_chat + 7;
+    const char *p     = chat + 7;
     const char *slash = strchr(p, '/');
     int len = slash ? (int)(slash - p) : (int)strlen(p);
     char chat_name[MAX_ROUTE_LEN];
@@ -101,31 +89,33 @@ static void load_and_set_member_list()
 
 static void open_selected_item()
 {
-    int count = (g_list_mode == LIST_MODE_CHATS) ? g_chat_count : g_user_count;
-    if (count == 0)
-        return;
+    int idx  = ui_get_list_selected();
+    int mode = ui_get_list_mode();
 
-    if (g_list_mode == LIST_MODE_CHATS)
+    if (mode == LIST_MODE_CHATS)
     {
+        const char *name = ui_get_list_item(idx);
+        if (!name) return;
         char route[CHAT_ROUTE_LEN];
-        snprintf(route, sizeof(route), "/chats/%s/messages",
-                 g_chat_names[g_list_selected]);
-        g_active = PANEL_CHAT;
-        g_focus = PANEL_CHAT;
+        snprintf(route, sizeof(route), "/chats/%s/messages", name);
+        ui_set_focus(PANEL_CHAT);
+        ui_set_active(PANEL_CHAT);
         load_and_set_chat_messages(route);
     }
-    else
+    else if (mode == LIST_MODE_USERS)
     {
-        if (g_login[0] && strcmp(g_user_names[g_list_selected], g_login) == 0)
+        const char *name = ui_get_list_item(idx);
+        if (!name) return;
+        const char *me = api_get_login();
+        if (me && strcmp(name, me) == 0)
         {
             ui_sys("Cannot open dialog with yourself");
             return;
         }
         char route[MAX_ROUTE_LEN];
-        snprintf(route, sizeof(route), "/users/%s/messages",
-                 g_user_names[g_list_selected]);
-        g_active = PANEL_CHAT;
-        g_focus = PANEL_CHAT;
+        snprintf(route, sizeof(route), "/users/%s/messages", name);
+        ui_set_focus(PANEL_CHAT);
+        ui_set_active(PANEL_CHAT);
         load_and_set_chat_messages(route);
     }
 }
@@ -137,56 +127,49 @@ static void handle_key_sys(int ch)
     case '\n':
     case KEY_ENTER:
         handle_sys_input();
-        g_active = PANEL_NONE;
+        ui_set_active(PANEL_NONE);
         break;
     case KEY_BACKSPACE:
     case 127:
-        g_sys_input_len = utf8_backspace(g_sys_input, g_sys_input_len);
+        ui_sys_input_backspace();
         break;
     case 27:
-        g_sys_input[0] = '\0';
-        g_sys_input_len = 0;
-        g_sys_state = SYS_IDLE;
-        g_active = PANEL_NONE;
+        ui_sys_input_clear();
+        ui_set_active(PANEL_NONE);
         break;
     default:
-        if (ch >= 32 && g_sys_input_len < MAX_TEXT_LEN - 1)
-        {
-            g_sys_input[g_sys_input_len++] = (char)ch;
-            g_sys_input[g_sys_input_len] = '\0';
-        }
+        if (ch >= 32)
+            ui_sys_input_append((char)ch);
         break;
     }
 }
 
 static void handle_key_nav(int ch)
 {
+    Panel focus = ui_get_focus();
     switch (ch)
     {
     case KEY_LEFT:
-        if (g_focus == PANEL_LIST || g_focus == PANEL_SYS)
-            g_focus = PANEL_CHAT;
+        if (focus == PANEL_LIST || focus == PANEL_SYS)
+            ui_set_focus(PANEL_CHAT);
         break;
     case KEY_RIGHT:
-        if (g_focus == PANEL_CHAT || g_focus == PANEL_SYS)
-            g_focus = PANEL_LIST;
+        if (focus == PANEL_CHAT || focus == PANEL_SYS)
+            ui_set_focus(PANEL_LIST);
         break;
     case KEY_DOWN:
-        if (g_focus != PANEL_SYS)
-            g_focus = PANEL_SYS;
+        if (focus != PANEL_SYS)
+            ui_set_focus(PANEL_SYS);
         break;
     case KEY_UP:
-        if (g_focus == PANEL_SYS)
-            g_focus = PANEL_CHAT;
+        if (focus == PANEL_SYS)
+            ui_set_focus(PANEL_CHAT);
         break;
     case '\n':
     case KEY_ENTER:
-        g_active = g_focus;
-        if (g_active == PANEL_SYS)
-        {
-            g_sys_input[0] = '\0';
-            g_sys_input_len = 0;
-        }
+        ui_set_active(focus);
+        if (ui_get_active() == PANEL_SYS)
+            ui_sys_input_clear();
         break;
     default:
         break;
@@ -195,71 +178,61 @@ static void handle_key_nav(int ch)
 
 static void handle_key_list(int ch)
 {
-    int count;
-    if (g_list_mode == LIST_MODE_CHATS)
-        count = g_chat_count;
-    else if (g_list_mode == LIST_MODE_USERS)
-        count = g_user_count;
-    else
-        count = g_member_count;
+    int      count = ui_get_list_count();
+    int      sel   = ui_get_list_selected();
+    ListMode mode  = ui_get_list_mode();
 
     switch (ch)
     {
     case KEY_UP:
-        if (g_list_selected > 0)
-            g_list_selected--;
+        if (sel > 0)
+            ui_set_list_selected(sel - 1);
         break;
     case KEY_DOWN:
-        if (g_list_selected < count - 1)
-            g_list_selected++;
+        if (sel < count - 1)
+            ui_set_list_selected(sel + 1);
         break;
     case KEY_LEFT:
-        if (g_list_mode == LIST_MODE_CHATS)
+        if (mode == LIST_MODE_CHATS)
         {
-            g_list_mode = LIST_MODE_MEMBERS;
-            g_list_selected = 0;
+            ui_set_list_mode(LIST_MODE_MEMBERS);
             load_and_set_member_list();
         }
-        else if (g_list_mode == LIST_MODE_USERS)
+        else if (mode == LIST_MODE_USERS)
         {
-            g_list_mode = LIST_MODE_CHATS;
-            g_list_selected = 0;
+            ui_set_list_mode(LIST_MODE_CHATS);
             load_and_set_chat_list();
         }
         else
         {
-            g_list_mode = LIST_MODE_USERS;
-            g_list_selected = 0;
+            ui_set_list_mode(LIST_MODE_USERS);
             load_and_set_user_list();
         }
         break;
     case KEY_RIGHT:
-        if (g_list_mode == LIST_MODE_CHATS)
+        if (mode == LIST_MODE_CHATS)
         {
-            g_list_mode = LIST_MODE_USERS;
-            g_list_selected = 0;
+            ui_set_list_mode(LIST_MODE_USERS);
             load_and_set_user_list();
         }
-        else if (g_list_mode == LIST_MODE_USERS)
+        else if (mode == LIST_MODE_USERS)
         {
-            g_list_mode = LIST_MODE_MEMBERS;
-            g_list_selected = 0;
+            ui_set_list_mode(LIST_MODE_MEMBERS);
             load_and_set_member_list();
         }
         else
         {
-            g_list_mode = LIST_MODE_CHATS;
-            g_list_selected = 0;
+            ui_set_list_mode(LIST_MODE_CHATS);
             load_and_set_chat_list();
         }
         break;
     case '\n':
     case KEY_ENTER:
-        if (g_list_mode != LIST_MODE_MEMBERS)
+        if (mode != LIST_MODE_MEMBERS)
             open_selected_item();
         break;
     case 27:
-        g_active = PANEL_NONE;
+        ui_set_active(PANEL_NONE);
         break;
     default:
         break;
@@ -271,48 +244,42 @@ static void handle_key_chat(int ch)
     switch (ch)
     {
     case KEY_UP:
-        if (g_msg_scroll < g_msg_count)
-            g_msg_scroll++;
+        ui_scroll_up();
         break;
     case KEY_DOWN:
-        if (g_msg_scroll > 0)
-            g_msg_scroll--;
+        ui_scroll_down();
         break;
     case '\n':
     case KEY_ENTER:
-        if (g_input_len > 0 && g_current_chat[0])
+        if (ui_get_input_len() > 0 && ui_get_current_chat())
         {
-            if (g_input[0] == '/')
+            const char *input = ui_get_input();
+            if (input[0] == '/')
             {
-                handle_command(g_input);
+                handle_command(input);
             }
             else
             {
                 SendArgs *a = malloc(sizeof(SendArgs));
-                strncpy(a->route, g_current_chat, sizeof(a->route) - 1);
-                strncpy(a->text, g_input, sizeof(a->text) - 1);
+                strncpy(a->route, ui_get_current_chat(), sizeof(a->route) - 1);
+                strncpy(a->text,  input,                 sizeof(a->text)  - 1);
                 pthread_t tid;
                 pthread_create(&tid, NULL, thread_send_message, a);
                 pthread_detach(tid);
             }
-            g_input[0] = '\0';
-            g_input_len = 0;
-            g_msg_scroll = 0;
+            ui_input_clear();
         }
         break;
     case KEY_BACKSPACE:
     case 127:
-        g_input_len = utf8_backspace(g_input, g_input_len);
+        ui_input_backspace();
         break;
     case 27:
-        g_active = PANEL_NONE;
+        ui_set_active(PANEL_NONE);
         break;
     default:
-        if (ch >= 32 && g_input_len < MAX_TEXT_LEN - 1)
-        {
-            g_input[g_input_len++] = (char)ch;
-            g_input[g_input_len] = '\0';
-        }
+        if (ch >= 32)
+            ui_input_append((char)ch);
         break;
     }
 }
@@ -322,27 +289,24 @@ void ui_run()
     load_and_set_chat_list();
     load_and_set_user_list();
     clearok(stdscr, TRUE);
-    draw_all();
+    ui_redraw();
 
     int ch;
     while ((ch = getch()) != 'q')
     {
-        if (g_notify_text[0])
+        if (ui_has_notify())
         {
-            g_notify_text[0] = '\0';
-            draw_all();
+            ui_clear_notify();
+            ui_redraw();
             continue;
         }
 
-        if (g_active == PANEL_SYS)
-            handle_key_sys(ch);
-        else if (g_active == PANEL_NONE)
-            handle_key_nav(ch);
-        else if (g_active == PANEL_LIST)
-            handle_key_list(ch);
-        else if (g_active == PANEL_CHAT)
-            handle_key_chat(ch);
+        Panel active = ui_get_active();
+        if      (active == PANEL_SYS)  handle_key_sys(ch);
+        else if (active == PANEL_NONE) handle_key_nav(ch);
+        else if (active == PANEL_LIST) handle_key_list(ch);
+        else if (active == PANEL_CHAT) handle_key_chat(ch);
 
-        draw_all();
+        ui_redraw();
     }
 }
