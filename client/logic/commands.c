@@ -13,7 +13,7 @@ static int current_chat_name(char *out, int maxlen)
     const char *chat = ui_get_current_chat();
     if (!chat || strncmp(chat, "/chats/", 7) != 0)
         return 0;
-    const char *p     = chat + 7;
+    const char *p = chat + 7;
     const char *slash = strchr(p, '/');
     int len = slash ? (int)(slash - p) : (int)strlen(p);
     if (len >= maxlen)
@@ -42,10 +42,24 @@ static void reload_chat_list()
     }
 }
 
-typedef struct { char name[MAX_ROUTE_LEN]; } CreateArgs;
-typedef struct { char chat[MAX_ROUTE_LEN]; char login[MAX_LOGIN_LEN]; } AddUserArgs;
-typedef struct { char chat[MAX_ROUTE_LEN]; char login[MAX_LOGIN_LEN]; } RemoveUserArgs;
-typedef struct { char chat[MAX_ROUTE_LEN]; } LeaveArgs;
+typedef struct
+{
+    char name[MAX_ROUTE_LEN];
+} CreateArgs;
+typedef struct
+{
+    char chat[MAX_ROUTE_LEN];
+    char login[MAX_LOGIN_LEN];
+} AddUserArgs;
+typedef struct
+{
+    char chat[MAX_ROUTE_LEN];
+    char login[MAX_LOGIN_LEN];
+} RemoveUserArgs;
+typedef struct
+{
+    char chat[MAX_ROUTE_LEN];
+} LeaveArgs;
 
 static void *thread_create_chat(void *arg)
 {
@@ -88,7 +102,11 @@ void handle_command(const char *cmd)
     if (strncmp(cmd, "/create ", 8) == 0)
     {
         const char *name = cmd + 8;
-        if (!name[0]) { ui_sys("Usage: /create <chatname>"); return; }
+        if (!name[0])
+        {
+            ui_sys("Usage: /create <chatname>");
+            return;
+        }
         CreateArgs *a = malloc(sizeof(CreateArgs));
         strncpy(a->name, name, sizeof(a->name) - 1);
         pthread_create(&tid, NULL, thread_create_chat, a);
@@ -102,8 +120,16 @@ void handle_command(const char *cmd)
     if (strncmp(cmd, "/add ", 5) == 0)
     {
         const char *login = cmd + 5;
-        if (!login[0]) { ui_sys("Usage: /add <username>"); return; }
-        if (!current_chat_name(chat, sizeof(chat))) { ui_sys("Error: not in a group chat"); return; }
+        if (!login[0])
+        {
+            ui_sys("Usage: /add <username>");
+            return;
+        }
+        if (!current_chat_name(chat, sizeof(chat)))
+        {
+            ui_sys("Error: not in a group chat");
+            return;
+        }
         AddUserArgs *a = malloc(sizeof(AddUserArgs));
         strncpy(a->chat, chat, sizeof(a->chat) - 1);
         strncpy(a->login, login, sizeof(a->login) - 1);
@@ -117,8 +143,16 @@ void handle_command(const char *cmd)
     if (strncmp(cmd, "/delete ", 8) == 0)
     {
         const char *login = cmd + 8;
-        if (!login[0]) { ui_sys("Usage: /delete <username>"); return; }
-        if (!current_chat_name(chat, sizeof(chat))) { ui_sys("Error: not in a group chat"); return; }
+        if (!login[0])
+        {
+            ui_sys("Usage: /delete <username>");
+            return;
+        }
+        if (!current_chat_name(chat, sizeof(chat)))
+        {
+            ui_sys("Error: not in a group chat");
+            return;
+        }
         RemoveUserArgs *a = malloc(sizeof(RemoveUserArgs));
         strncpy(a->chat, chat, sizeof(a->chat) - 1);
         strncpy(a->login, login, sizeof(a->login) - 1);
@@ -131,8 +165,16 @@ void handle_command(const char *cmd)
 
     if (strcmp(cmd, "/leave") == 0)
     {
-        if (is_private_chat()) { ui_sys("Error: cannot leave a private dialog"); return; }
-        if (!current_chat_name(chat, sizeof(chat))) { ui_sys("Error: not in a group chat"); return; }
+        if (is_private_chat())
+        {
+            ui_sys("Error: cannot leave a private dialog");
+            return;
+        }
+        if (!current_chat_name(chat, sizeof(chat)))
+        {
+            ui_sys("Error: not in a group chat");
+            return;
+        }
         LeaveArgs *a = malloc(sizeof(LeaveArgs));
         strncpy(a->chat, chat, sizeof(a->chat) - 1);
         pthread_create(&tid, NULL, thread_leave_chat, a);

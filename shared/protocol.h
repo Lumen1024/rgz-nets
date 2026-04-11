@@ -2,7 +2,13 @@
 
 #include <cJSON.h>
 
-#define MAX_LOGIN_LEN 64
+#define MAX_LOGIN_LEN      64
+#define MAX_MESSAGES      512
+#define MAX_CHATS         128
+#define MAX_USERS         256
+#define MAX_MEMBERS       256
+#define MAX_SYS_MSG       512
+#define CHAT_ROUTE_LEN    (MAX_ROUTE_LEN + 18)
 #define MAX_TEXT_LEN 1024
 #define MAX_TIMESTAMP_LEN 32
 #define MAX_TOKEN_LEN 256

@@ -54,7 +54,7 @@ static void load_and_set_user_list()
         int has_msg[MAX_USERS];
         for (int i = 0; i < count; i++)
         {
-            ptrs[i]    = names[i];
+            ptrs[i] = names[i];
             has_msg[i] = 0;
         }
         ui_set_user_list(ptrs, has_msg, count);
@@ -69,7 +69,7 @@ static void load_and_set_member_list()
         ui_set_member_list(NULL, 0);
         return;
     }
-    const char *p     = chat + 7;
+    const char *p = chat + 7;
     const char *slash = strchr(p, '/');
     int len = slash ? (int)(slash - p) : (int)strlen(p);
     char chat_name[MAX_ROUTE_LEN];
@@ -89,13 +89,14 @@ static void load_and_set_member_list()
 
 static void open_selected_item()
 {
-    int idx  = ui_get_list_selected();
+    int idx = ui_get_list_selected();
     int mode = ui_get_list_mode();
 
     if (mode == LIST_MODE_CHATS)
     {
         const char *name = ui_get_list_item(idx);
-        if (!name) return;
+        if (!name)
+            return;
         char route[CHAT_ROUTE_LEN];
         snprintf(route, sizeof(route), "/chats/%s/messages", name);
         ui_set_focus(PANEL_CHAT);
@@ -105,7 +106,8 @@ static void open_selected_item()
     else if (mode == LIST_MODE_USERS)
     {
         const char *name = ui_get_list_item(idx);
-        if (!name) return;
+        if (!name)
+            return;
         const char *me = api_get_login();
         if (me && strcmp(name, me) == 0)
         {
@@ -178,9 +180,9 @@ static void handle_key_nav(int ch)
 
 static void handle_key_list(int ch)
 {
-    int      count = ui_get_list_count();
-    int      sel   = ui_get_list_selected();
-    ListMode mode  = ui_get_list_mode();
+    int count = ui_get_list_count();
+    int sel = ui_get_list_selected();
+    ListMode mode = ui_get_list_mode();
 
     switch (ch)
     {
@@ -262,7 +264,7 @@ static void handle_key_chat(int ch)
             {
                 SendArgs *a = malloc(sizeof(SendArgs));
                 strncpy(a->route, ui_get_current_chat(), sizeof(a->route) - 1);
-                strncpy(a->text,  input,                 sizeof(a->text)  - 1);
+                strncpy(a->text, input, sizeof(a->text) - 1);
                 pthread_t tid;
                 pthread_create(&tid, NULL, thread_send_message, a);
                 pthread_detach(tid);
@@ -302,10 +304,14 @@ void ui_run()
         }
 
         Panel active = ui_get_active();
-        if      (active == PANEL_SYS)  handle_key_sys(ch);
-        else if (active == PANEL_NONE) handle_key_nav(ch);
-        else if (active == PANEL_LIST) handle_key_list(ch);
-        else if (active == PANEL_CHAT) handle_key_chat(ch);
+        if (active == PANEL_SYS)
+            handle_key_sys(ch);
+        else if (active == PANEL_NONE)
+            handle_key_nav(ch);
+        else if (active == PANEL_LIST)
+            handle_key_list(ch);
+        else if (active == PANEL_CHAT)
+            handle_key_chat(ch);
 
         ui_redraw();
     }
