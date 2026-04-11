@@ -18,29 +18,40 @@
 #include <user_repository.h>
 #include <notify.h>
 
-static const char *method_str(RequestType t) {
-    switch (t) {
-        case GET:    return "GET";
-        case POST:   return "POST";
-        case DELETE: return "DELETE";
-        default:     return "?";
+static const char *method_str(RequestType t)
+{
+    switch (t)
+    {
+    case GET:
+        return "GET";
+    case POST:
+        return "POST";
+    case DELETE:
+        return "DELETE";
+    default:
+        return "?";
     }
 }
 
 // Extract segment from route at position idx (0-based), returns 0 on success
-static int route_segment(const char *route, int idx, char *out, size_t out_size) {
+static int route_segment(const char *route, int idx, char *out, size_t out_size)
+{
     const char *p = route;
-    if (*p == '/') p++;
+    if (*p == '/')
+        p++;
 
-    for (int i = 0; i < idx; i++) {
+    for (int i = 0; i < idx; i++)
+    {
         p = strchr(p, '/');
-        if (!p) return -1;
+        if (!p)
+            return -1;
         p++;
     }
 
     const char *end = strchr(p, '/');
     size_t len = end ? (size_t)(end - p) : strlen(p);
-    if (len == 0 || len >= out_size) return -1;
+    if (len == 0 || len >= out_size)
+        return -1;
 
     memcpy(out, p, len);
     out[len] = '\0';
@@ -48,22 +59,27 @@ static int route_segment(const char *route, int idx, char *out, size_t out_size)
 }
 
 // Returns number of '/' separated segments in route
-static int route_depth(const char *route) {
+static int route_depth(const char *route)
+{
     int depth = 0;
     const char *p = route;
-    if (*p == '/') p++;
-    if (*p == '\0') return 0;
+    if (*p == '/')
+        p++;
+    if (*p == '\0')
+        return 0;
     depth = 1;
-    while ((p = strchr(p, '/')) != NULL) {
+    while ((p = strchr(p, '/')) != NULL)
+    {
         depth++;
         p++;
     }
     return depth;
 }
 
-static Response dispatch(Request *req, const char *login) {
+static Response dispatch(Request *req, const char *login)
+{
     const char *route = req->route ? req->route : "";
-    RequestType type  = req->type;
+    RequestType type = req->type;
 
     char seg0[MAX_ROUTE_LEN] = {0};
     char seg1[MAX_ROUTE_LEN] = {0};
@@ -89,13 +105,15 @@ static Response dispatch(Request *req, const char *login) {
         return make_error(ERR_UNAUTHORIZED);
 
     // GET /users
-    if (strcmp(seg0, "users") == 0 && depth == 1 && type == GET) {
+    if (strcmp(seg0, "users") == 0 && depth == 1 && type == GET)
+    {
         char **logins = NULL;
         int count = 0;
         if (repo_user_list(&logins, &count) != 0)
             return make_error(ERR_INTERNAL);
         cJSON *arr = cJSON_CreateArray();
-        for (int i = 0; i < count; i++) {
+        for (int i = 0; i < count; i++)
+        {
             cJSON_AddItemToArray(arr, cJSON_CreateString(logins[i]));
             free(logins[i]);
         }
@@ -104,9 +122,12 @@ static Response dispatch(Request *req, const char *login) {
     }
 
     // /users/{login}/messages
-    if (strcmp(seg0, "users") == 0 && depth == 3 && strcmp(seg2, "messages") == 0) {
-        if (type == GET)  return handle_get_private_messages(login, seg1);
-        if (type == POST) return handle_post_private_message(seg1, req, login);
+    if (strcmp(seg0, "users") == 0 && depth == 3 && strcmp(seg2, "messages") == 0)
+    {
+        if (type == GET)
+            return handle_get_private_messages(login, seg1);
+        if (type == POST)
+            return handle_post_private_message(seg1, req, login);
     }
 
     // /users/{login}/files
@@ -114,22 +135,30 @@ static Response dispatch(Request *req, const char *login) {
         return handle_file_request(seg1, req, login);
 
     // /users/{login}/files/{id}/approve  or  /users/{login}/files/{id}/decline
-    if (strcmp(seg0, "users") == 0 && depth == 5 && strcmp(seg2, "files") == 0) {
+    if (strcmp(seg0, "users") == 0 && depth == 5 && strcmp(seg2, "files") == 0)
+    {
         char seg4[MAX_ROUTE_LEN] = {0};
         route_segment(route, 4, seg4, sizeof(seg4));
-        if (strcmp(seg4, "approve") == 0 && type == POST) return handle_file_approve(seg1, seg3);
-        if (strcmp(seg4, "decline") == 0 && type == POST) return handle_file_decline(seg1, seg3);
+        if (strcmp(seg4, "approve") == 0 && type == POST)
+            return handle_file_approve(seg1, seg3);
+        if (strcmp(seg4, "decline") == 0 && type == POST)
+            return handle_file_decline(seg1, seg3);
     }
 
     // GET/POST /chats
-    if (strcmp(seg0, "chats") == 0 && depth == 1) {
-        if (type == GET)  return handle_get_chats(login);
-        if (type == POST) return handle_create_chat(req, login);
+    if (strcmp(seg0, "chats") == 0 && depth == 1)
+    {
+        if (type == GET)
+            return handle_get_chats(login);
+        if (type == POST)
+            return handle_create_chat(req, login);
     }
 
     // /chats/{name}
-    if (strcmp(seg0, "chats") == 0 && depth == 2) {
-        if (type == DELETE) return handle_delete_chat(seg1, login);
+    if (strcmp(seg0, "chats") == 0 && depth == 2)
+    {
+        if (type == DELETE)
+            return handle_delete_chat(seg1, login);
     }
 
     // /chats/{name}/host
@@ -137,31 +166,42 @@ static Response dispatch(Request *req, const char *login) {
         return handle_get_chat_host(seg1);
 
     // /chats/{name}/users
-    if (strcmp(seg0, "chats") == 0 && depth == 3 && strcmp(seg2, "users") == 0) {
-        if (type == GET)    return handle_get_chat_users(seg1);
-        if (type == POST)   return handle_add_chat_user(seg1, req);
-        if (type == DELETE) return handle_remove_chat_user(seg1, req);
+    if (strcmp(seg0, "chats") == 0 && depth == 3 && strcmp(seg2, "users") == 0)
+    {
+        if (type == GET)
+            return handle_get_chat_users(seg1);
+        if (type == POST)
+            return handle_add_chat_user(seg1, req);
+        if (type == DELETE)
+            return handle_remove_chat_user(seg1, req);
     }
 
     // /chats/{name}/messages
-    if (strcmp(seg0, "chats") == 0 && depth == 3 && strcmp(seg2, "messages") == 0) {
-        if (type == GET)  return handle_get_chat_messages(seg1);
-        if (type == POST) return handle_post_chat_message(seg1, req, login);
+    if (strcmp(seg0, "chats") == 0 && depth == 3 && strcmp(seg2, "messages") == 0)
+    {
+        if (type == GET)
+            return handle_get_chat_messages(seg1);
+        if (type == POST)
+            return handle_post_chat_message(seg1, req, login);
     }
 
     return make_error(ERR_NOT_FOUND);
 }
 
-void handle_client(int socket_fd) {
+void handle_client(int socket_fd)
+{
     char buf[MSG_BUFFER_SIZE];
     char login[MAX_LOGIN_LEN] = {0};
 
-    while (1) {
+    while (1)
+    {
         int n = read_message(socket_fd, buf, sizeof(buf));
-        if (n != 0) break;
+        if (n != 0)
+            break;
 
         Request req;
-        if (parse_request(buf, &req) != 0) {
+        if (parse_request(buf, &req) != 0)
+        {
             Response err = make_error(ERR_BAD_REQUEST);
             send_response(socket_fd, err);
             continue;
@@ -169,8 +209,10 @@ void handle_client(int socket_fd) {
 
         // Validate token and extract login for authenticated routes
         char req_login[MAX_LOGIN_LEN] = {0};
-        if (req.token && req.token[0] != '\0') {
-            if (validate_token(req.token, req_login) == 0) {
+        if (req.token && req.token[0] != '\0')
+        {
+            if (validate_token(req.token, req_login) == 0)
+            {
                 strncpy(login, req_login, MAX_LOGIN_LEN - 1);
                 notify_register(socket_fd, login);
             }
@@ -187,7 +229,8 @@ void handle_client(int socket_fd) {
         send_response(socket_fd, resp);
 
         free_request(&req);
-        if (resp.content) {
+        if (resp.content)
+        {
             cJSON_Delete(resp.content);
         }
     }

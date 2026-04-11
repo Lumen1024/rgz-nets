@@ -16,28 +16,34 @@
 #include <notify.h>
 
 #define DEFAULT_PORT 8080
-#define BACKLOG      16
+#define BACKLOG 16
 
-static void reap_children(int sig) {
+static void reap_children(int sig)
+{
     (void)sig;
     pid_t pid;
-    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0) {
+    while ((pid = waitpid(-1, NULL, WNOHANG)) > 0)
+    {
         notify_parent_unregister(pid);
     }
 }
 
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
     int port = DEFAULT_PORT;
-    if (argc == 2) {
+    if (argc == 2)
+    {
         port = atoi(argv[1]);
-        if (port <= 0 || port > 65535) {
+        if (port <= 0 || port > 65535)
+        {
             fprintf(stderr, "invalid port: %s\n", argv[1]);
             return 1;
         }
     }
 
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0) {
+    if (server_fd < 0)
+    {
         perror("socket");
         return 1;
     }
@@ -47,17 +53,19 @@ int main(int argc, char *argv[]) {
 
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
-    addr.sin_family      = AF_INET;
+    addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port        = htons(port);
+    addr.sin_port = htons(port);
 
-    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
         perror("bind");
         close(server_fd);
         return 1;
     }
 
-    if (listen(server_fd, BACKLOG) < 0) {
+    if (listen(server_fd, BACKLOG) < 0)
+    {
         perror("listen");
         close(server_fd);
         return 1;
@@ -73,7 +81,8 @@ int main(int argc, char *argv[]) {
     sa.sa_flags = SA_RESTART;
     sigaction(SIGCHLD, &sa, NULL);
 
-    while (1) {
+    while (1)
+    {
         // Dispatch any pending notifications from children
         notify_dispatch();
 
@@ -83,12 +92,14 @@ int main(int argc, char *argv[]) {
         FD_SET(server_fd, &rfds);
         struct timeval tv = {0, 10000}; // 10ms
         int ready = select(server_fd + 1, &rfds, NULL, NULL, &tv);
-        if (ready <= 0) continue;
+        if (ready <= 0)
+            continue;
 
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
         int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
-        if (client_fd < 0) {
+        if (client_fd < 0)
+        {
             perror("accept");
             continue;
         }
@@ -98,14 +109,16 @@ int main(int argc, char *argv[]) {
 
         // Create pipe: parent reads [0], child writes [1]
         int pipefd[2];
-        if (pipe(pipefd) < 0) {
+        if (pipe(pipefd) < 0)
+        {
             perror("pipe");
             close(client_fd);
             continue;
         }
 
         pid_t pid = fork();
-        if (pid < 0) {
+        if (pid < 0)
+        {
             perror("fork");
             close(pipefd[0]);
             close(pipefd[1]);
@@ -113,7 +126,8 @@ int main(int argc, char *argv[]) {
             continue;
         }
 
-        if (pid == 0) {
+        if (pid == 0)
+        {
             // Child: close server fd and pipe read-end
             close(server_fd);
             close(pipefd[0]);
