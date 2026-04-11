@@ -71,7 +71,10 @@ Response handle_login(Request *req) {
         return make_error(ERR_INTERNAL);
     }
 
-    if (verify_password(password, hash_out) != 0) {
+    char *computed = hash_password(password);
+    int match = computed && strcmp(computed, hash_out) == 0;
+    free(computed);
+    if (!match) {
         return make_error(ERR_UNAUTHORIZED);
     }
 

@@ -1,9 +1,12 @@
 #include <auth.h>
+#include <protocol.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+
+#define SECRET_KEY "rgz_secret_key"
 
 // djb2 hash algorithm
 static unsigned long djb2(const char *str)
@@ -17,10 +20,16 @@ static unsigned long djb2(const char *str)
     return hash;
 }
 
+static unsigned long sign(const char *login, long timestamp)
+{
+    char buf[512];
+    snprintf(buf, sizeof(buf), "%s:%ld:%s", login, timestamp, SECRET_KEY);
+    return djb2(buf);
+}
+
 char *hash_password(const char *password)
 {
     unsigned long h = djb2(password);
-    // 16 hex chars + null terminator
     char *hex = malloc(17);
     if (!hex)
         return NULL;
@@ -28,25 +37,17 @@ char *hash_password(const char *password)
     return hex;
 }
 
-int verify_password(const char *password, const char *hash)
-{
-    char *computed = hash_password(password);
-    if (!computed)
-        return -1;
-    int result = strcmp(computed, hash) == 0 ? 0 : -1;
-    free(computed);
-    return result;
-}
-
 char *generate_token(const char *login)
 {
-    // Format: "login:timestamp"
+    // Format: "login:timestamp:signature"
     time_t now = time(NULL);
-    size_t len = strlen(login) + 1 + 20 + 1; // login + ':' + timestamp + '\0'
+    unsigned long sig = sign(login, (long)now);
+
+    size_t len = strlen(login) + 1 + 20 + 1 + 16 + 1;
     char *token = malloc(len);
     if (!token)
         return NULL;
-    snprintf(token, len, "%s:%ld", login, (long)now);
+    snprintf(token, len, "%s:%ld:%016lx", login, (long)now, sig);
     return token;
 }
 
@@ -55,13 +56,29 @@ int validate_token(const char *token, char *login_out)
     if (!token || !login_out)
         return -1;
 
-    const char *colon = strrchr(token, ':');
-    if (!colon || colon == token)
+    // find second colon from the right (signature starts after it)
+    const char *sig_colon = strrchr(token, ':');
+    if (!sig_colon || sig_colon == token)
         return -1;
 
-    size_t login_len = (size_t)(colon - token);
-    memcpy(login_out, token, login_len);
-    login_out[login_len] = '\0';
+    // find first colon (separates login from timestamp)
+    const char *ts_colon = strchr(token, ':');
+    if (!ts_colon || ts_colon == sig_colon)
+        return -1;
 
+    size_t login_len = (size_t)(ts_colon - token);
+    long timestamp = atol(ts_colon + 1);
+    unsigned long stored_sig = strtoul(sig_colon + 1, NULL, 16);
+
+    char login_buf[MAX_LOGIN_LEN];
+    if (login_len >= MAX_LOGIN_LEN)
+        return -1;
+    memcpy(login_buf, token, login_len);
+    login_buf[login_len] = '\0';
+
+    if (sign(login_buf, timestamp) != stored_sig)
+        return -1;
+
+    memcpy(login_out, login_buf, login_len + 1);
     return 0;
 }
