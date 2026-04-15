@@ -16,7 +16,7 @@
 #include <notify.h>
 
 #define DEFAULT_PORT 8080
-#define BACKLOG 16
+#define BACKLOG 16 // очередь для принятия соединения
 
 static void reap_children(int sig)
 {
@@ -28,86 +28,117 @@ static void reap_children(int sig)
     }
 }
 
-int main(int argc, char *argv[])
+static void setup_sigchld(void)
 {
-    int port = DEFAULT_PORT;
-    if (argc == 2)
-    {
-        port = atoi(argv[1]);
-        if (port <= 0 || port > 65535)
-        {
-            fprintf(stderr, "invalid port: %s\n", argv[1]);
-            return 1;
-        }
-    }
-
-    int server_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server_fd < 0)
-    {
-        perror("socket");
-        return 1;
-    }
-
-    int opt = 1;
-    setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = INADDR_ANY;
-    addr.sin_port = htons(port);
-
-    if (bind(server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
-    {
-        perror("bind");
-        close(server_fd);
-        return 1;
-    }
-
-    if (listen(server_fd, BACKLOG) < 0)
-    {
-        perror("listen");
-        close(server_fd);
-        return 1;
-    }
-
-    notify_init();
-
-    printf("server listening on port %d\n", port);
-
     struct sigaction sa;
     sa.sa_handler = reap_children;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(SIGCHLD, &sa, NULL);
+}
+
+static int get_port(int argc, char *argv[])
+{
+    if (argc != 2)
+        return DEFAULT_PORT;
+
+    int port = atoi(argv[1]);
+    if (port <= 0 || port > 65535)
+    {
+        fprintf(stderr, "invalid port: %s\n", argv[1]);
+        return -1;
+    }
+    return port;
+}
+
+static int configure_server_socket(int port)
+{
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0)
+    {
+        perror("socket");
+        return -1;
+    }
+
+    int opt = 1; // adress reuse
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(port);
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0)
+    {
+        perror("bind");
+        close(fd);
+        return -1;
+    }
+
+    if (listen(fd, BACKLOG) < 0)
+    {
+        perror("listen");
+        close(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
+static int wait_connections(int server_fd)
+{
+    fd_set rfds;
+    FD_ZERO(&rfds);
+    FD_SET(server_fd, &rfds);
+
+    struct timeval tv = {0, 10000}; // 10ms
+    int ready = select(server_fd + 1, &rfds, NULL, NULL, &tv);
+}
+
+static int accept_client(int server_fd)
+{
+    struct sockaddr_in client_addr;
+    socklen_t client_len = sizeof(client_addr);
+    int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+    if (client_fd < 0)
+    {
+        perror("accept");
+        return -1;
+    }
+
+    printf("client connected: %s\n", inet_ntoa(client_addr.sin_addr));
+    fflush(stdout);
+
+    return client_fd;
+}
+
+int main(int argc, char *argv[])
+{
+    int port = get_port(argc, argv);
+    if (port < 0)
+        return 1;
+    int server_fd = configure_server_socket(port);
+    if (server_fd < 0)
+        return 1;
+
+    notify_init();
+    setup_sigchld();
+
+    printf("server port: %d\n", port);
 
     while (1)
     {
-        // Dispatch any pending notifications from children
         notify_dispatch();
 
-        // Non-blocking accept via select with short timeout
-        fd_set rfds;
-        FD_ZERO(&rfds);
-        FD_SET(server_fd, &rfds);
-        struct timeval tv = {0, 10000}; // 10ms
-        int ready = select(server_fd + 1, &rfds, NULL, NULL, &tv);
-        if (ready <= 0)
+        if (wait_connections(server_fd) <= 0)
             continue;
 
-        struct sockaddr_in client_addr;
-        socklen_t client_len = sizeof(client_addr);
-        int client_fd = accept(server_fd, (struct sockaddr *)&client_addr, &client_len);
+        int client_fd = accept_client(server_fd);
         if (client_fd < 0)
-        {
-            perror("accept");
-            continue;
-        }
+            return -1;
 
-        printf("client connected: %s\n", inet_ntoa(client_addr.sin_addr));
-        fflush(stdout);
-
-        // Create pipe: parent reads [0], child writes [1]
+        // parent reads [0], child writes [1]
+        // for notify
         int pipefd[2];
         if (pipe(pipefd) < 0)
         {
@@ -126,13 +157,14 @@ int main(int argc, char *argv[])
             continue;
         }
 
-        if (pid == 0)
+        if (pid == 0) // child
         {
-            // Child: close server fd and pipe read-end
             close(server_fd);
             close(pipefd[0]);
+
             notify_child_init(pipefd[1]);
             handle_client(client_fd);
+
             close(pipefd[1]);
             exit(0);
         }

@@ -30,7 +30,7 @@ CLIENT_OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(CLIENT_SRCS))
 CLIENT_BIN  = $(BIN_DIR)/client
 
 # Include paths
-INCLUDES = -I$(LIB_DIR) -I$(SHARED_DIR) -I$(SERVER_DIR) -I$(SERVER_DIR)/handlers -I$(SERVER_DIR)/repositories -I$(CLIENT_DIR)
+INCLUDES = -I$(LIB_DIR) -I$(SHARED_DIR) -I$(SHARED_DIR)/protocol -I$(SERVER_DIR) -I$(SERVER_DIR)/handlers -I$(SERVER_DIR)/repositories -I$(SERVER_DIR)/notify -I$(CLIENT_DIR)
 
 .PHONY: all clean shared server client dirs
 
@@ -39,8 +39,10 @@ all: dirs shared server client
 dirs:
 	@mkdir -p $(BIN_DIR) $(OBJ_DIR) $(LIB_DIR)
 	@mkdir -p $(OBJ_DIR)/$(SHARED_DIR)
+	@mkdir -p $(OBJ_DIR)/$(SHARED_DIR)/protocol
 	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/handlers
 	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/repositories
+	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/notify
 	@mkdir -p $(OBJ_DIR)/$(CLIENT_DIR)
 	@mkdir -p $(OBJ_DIR)/$(LIB_DIR)
 
