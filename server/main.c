@@ -13,7 +13,9 @@
 #include <arpa/inet.h>
 
 #include <client_handler.h>
-#include <notify.h>
+#include <notify/shared.h>
+#include <notify/parent.h>
+#include <notify/notify.h>
 
 #define DEFAULT_PORT 8080
 #define BACKLOG 16 // очередь для принятия соединения
@@ -92,7 +94,7 @@ static int wait_connections(int server_fd)
     FD_SET(server_fd, &rfds);
 
     struct timeval tv = {0, 10000}; // 10ms
-    int ready = select(server_fd + 1, &rfds, NULL, NULL, &tv);
+    return select(server_fd + 1, &rfds, NULL, NULL, &tv);
 }
 
 static int accept_client(int server_fd)
@@ -169,6 +171,7 @@ int main(int argc, char *argv[])
             exit(0);
         }
 
+        // parent
         // Parent: keep a dup of client_fd for sending notifications,
         // then close the original (child has its own copy from fork).
         int parent_client_fd = dup(client_fd);

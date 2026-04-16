@@ -1,9 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include <notify/child.h>
+#include <notify/notify.h>
 #include <notify/shared.h>
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -26,47 +25,22 @@ void notify_register(int socket_fd, const char *login)
         return;
     pid_t my_pid = getpid();
     pthread_mutex_lock(&g_shared->lock);
-
     for (int i = 0; i < g_shared->count; i++)
     {
         if (g_shared->entries[i].pid == my_pid)
         {
             strncpy(g_shared->entries[i].login, login, MAX_LOGIN_LEN - 1);
             g_shared->entries[i].login[MAX_LOGIN_LEN - 1] = '\0';
-            pthread_mutex_unlock(&g_shared->lock);
-            return;
+            break;
         }
     }
-
-    if (g_shared->count < MAX_CLIENTS)
-    {
-        g_shared->entries[g_shared->count].pid = my_pid;
-        strncpy(g_shared->entries[g_shared->count].login, login, MAX_LOGIN_LEN - 1);
-        g_shared->entries[g_shared->count].login[MAX_LOGIN_LEN - 1] = '\0';
-        g_shared->count++;
-    }
-
     pthread_mutex_unlock(&g_shared->lock);
 }
 
 void notify_unregister(int socket_fd)
 {
     (void)socket_fd;
-    if (!g_shared)
-        return;
-    pid_t my_pid = getpid();
-    pthread_mutex_lock(&g_shared->lock);
-
-    for (int i = 0; i < g_shared->count; i++)
-    {
-        if (g_shared->entries[i].pid == my_pid)
-        {
-            g_shared->entries[i] = g_shared->entries[--g_shared->count];
-            break;
-        }
-    }
-
-    pthread_mutex_unlock(&g_shared->lock);
+    // запись удаляет родитель в notify_parent_unregister при получении SIGCHLD
 }
 
 void notify_user(const char *login, Notification notif)

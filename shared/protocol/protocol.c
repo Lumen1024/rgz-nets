@@ -2,6 +2,17 @@
 
 #include <string.h>
 
+const char *request_type_str(RequestType t)
+{
+    switch (t)
+    {
+    case GET:    return "GET";
+    case POST:   return "POST";
+    case DELETE: return "DELETE";
+    default:     return "?";
+    }
+}
+
 int parse_message_kind(const char *buf, MessageKind *kind_out)
 {
     cJSON *json = cJSON_Parse(buf);

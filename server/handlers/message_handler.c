@@ -7,7 +7,7 @@
 #include <protocol.h>
 #include <response.h>
 #include <notification.h>
-#include <notify.h>
+#include <notify/notify.h>
 #include <message_repository.h>
 #include <chat_repository.h>
 #include <user_repository.h>

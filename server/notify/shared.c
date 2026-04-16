@@ -8,7 +8,7 @@
 
 SharedClients *g_shared = NULL;
 
-void notify_shared_init()
+void notify_init()
 {
     g_shared = mmap(NULL, sizeof(SharedClients),
                     PROT_READ | PROT_WRITE,

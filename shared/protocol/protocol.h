@@ -46,3 +46,4 @@ typedef struct
 } Notification;
 
 int parse_message_kind(const char *buf, MessageKind *kind_out);
+const char *request_type_str(RequestType t);
