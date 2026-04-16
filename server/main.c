@@ -14,7 +14,7 @@
 
 #include <client_handler.h>
 #include <notify/shared.h>
-#include <notify/parent.h>
+#include <notify/notify_dispatcher.h>
 #include <notify/notify.h>
 
 #define DEFAULT_PORT 8080
@@ -26,7 +26,7 @@ static void reap_children(int sig)
     pid_t pid;
     while ((pid = waitpid(-1, NULL, WNOHANG)) > 0)
     {
-        notify_parent_unregister(pid);
+        notify_client_remove(pid);
     }
 }
 
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
         int parent_client_fd = dup(client_fd);
         close(pipefd[1]);
         close(client_fd);
-        notify_parent_register(pid, pipefd[0], parent_client_fd);
+        notify_client_add(pid, pipefd[0], parent_client_fd);
     }
 
     close(server_fd);
