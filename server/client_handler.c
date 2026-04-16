@@ -218,6 +218,5 @@ void handle_client(int socket_fd)
             cJSON_Delete(resp.content);
     }
 
-    notify_unregister(socket_fd);
     close(socket_fd);
 }

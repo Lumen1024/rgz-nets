@@ -5,7 +5,7 @@
 #include <model.h>
 #include <protocol.h>
 
-#define PIPE_HDR_SIZE (MAX_LOGIN_LEN + sizeof(uint32_t))
+#define PIPE_HEADER_SIZE (MAX_LOGIN_LEN + sizeof(uint32_t))
 #define MAX_CLIENTS 256
 
 typedef struct

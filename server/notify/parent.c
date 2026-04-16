@@ -21,10 +21,10 @@ void notify_parent_register(pid_t pid, int pipe_read_fd, int client_fd)
     if (g_shared->count < MAX_CLIENTS)
     {
         ClientEntry *e = &g_shared->entries[g_shared->count++];
-        e->pid          = pid;
-        e->client_fd    = client_fd;
+        e->pid = pid;
+        e->client_fd = client_fd;
         e->pipe_read_fd = pipe_read_fd;
-        e->login[0]     = '\0';
+        e->login[0] = '\0';
     }
     pthread_mutex_unlock(&g_shared->lock);
 }
@@ -83,8 +83,8 @@ void notify_dispatch()
         if (!FD_ISSET(pfd, &rfds))
             continue;
 
-        char hdr[PIPE_HDR_SIZE];
-        if (read(pfd, hdr, PIPE_HDR_SIZE) != (ssize_t)PIPE_HDR_SIZE)
+        char hdr[PIPE_HEADER_SIZE];
+        if (read(pfd, hdr, PIPE_HEADER_SIZE) != (ssize_t)PIPE_HEADER_SIZE)
             continue;
 
         char login[MAX_LOGIN_LEN];

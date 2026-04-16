@@ -6,9 +6,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <cJSON.h>
 #include <notification.h>
+#include <protocol.h>
 #include <chat_repository.h>
 
 static int g_child_pipe_write = -1;
@@ -36,12 +38,6 @@ void notify_register(const char *login)
     pthread_mutex_unlock(&g_shared->lock);
 }
 
-void notify_unregister(int socket_fd)
-{
-    (void)socket_fd;
-    // запись удаляет родитель в notify_parent_unregister при получении SIGCHLD
-}
-
 void notify_user(const char *login, Notification notif)
 {
     if (g_child_pipe_write < 0)
@@ -59,12 +55,12 @@ void notify_user(const char *login, Notification notif)
 
     uint32_t json_len = (uint32_t)strlen(json);
 
-    char hdr[PIPE_HDR_SIZE];
-    memset(hdr, 0, sizeof(hdr));
-    strncpy(hdr, login, MAX_LOGIN_LEN - 1);
-    memcpy(hdr + MAX_LOGIN_LEN, &json_len, sizeof(uint32_t));
+    char header[PIPE_HEADER_SIZE];
+    memset(header, 0, sizeof(header));
+    strncpy(header, login, MAX_LOGIN_LEN - 1);
+    memcpy(header + MAX_LOGIN_LEN, &json_len, sizeof(uint32_t));
 
-    write(g_child_pipe_write, hdr, PIPE_HDR_SIZE);
+    write(g_child_pipe_write, header, PIPE_HEADER_SIZE);
     write(g_child_pipe_write, json, json_len);
     free(json);
 }
@@ -82,4 +78,40 @@ void notify_chat(const char *chat_name, Notification notif)
         free(logins[i]);
     }
     free(logins);
+}
+
+static void fill_timestamp(cJSON *obj)
+{
+    char ts[MAX_TIMESTAMP_LEN];
+    time_t now = time(NULL);
+    struct tm *tm_info = localtime(&now);
+    strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", tm_info);
+    cJSON_AddStringToObject(obj, "timestamp", ts);
+}
+
+void notify_new_chat_message(const char *chat, const char *login, const char *text)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", login);
+    cJSON_AddStringToObject(body, "text", text);
+    cJSON_AddStringToObject(body, "chat", chat);
+    fill_timestamp(body);
+
+    Notification notif = {MSG_NOTIFICATION, NOTIF_NEW_MESSAGE, body};
+    notify_chat(chat, notif);
+    cJSON_Delete(body);
+}
+
+void notify_new_private_message(const char *to, const char *from, const char *text)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "login", from);
+    cJSON_AddStringToObject(body, "text", text);
+    cJSON_AddStringToObject(body, "to", to);
+    fill_timestamp(body);
+
+    Notification notif = {MSG_NOTIFICATION, NOTIF_NEW_MESSAGE, body};
+    notify_user(to, notif);
+    notify_user(from, notif);
+    cJSON_Delete(body);
 }
