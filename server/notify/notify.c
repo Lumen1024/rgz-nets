@@ -18,9 +18,8 @@ void notify_child_init(int pipe_write_fd)
     g_child_pipe_write = pipe_write_fd;
 }
 
-void notify_register(int socket_fd, const char *login)
+void notify_register(const char *login)
 {
-    (void)socket_fd;
     if (!g_shared)
         return;
     pid_t my_pid = getpid();

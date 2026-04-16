@@ -48,7 +48,7 @@ static int get_port(int argc, char *argv[])
     if (port <= 0 || port > 65535)
     {
         fprintf(stderr, "invalid port: %s\n", argv[1]);
-        return -1;
+        exit(1);
     }
     return port;
 }
@@ -59,7 +59,7 @@ static int configure_server_socket(int port)
     if (fd < 0)
     {
         perror("socket");
-        return -1;
+        exit(1);
     }
 
     int opt = 1; // adress reuse
@@ -74,14 +74,14 @@ static int configure_server_socket(int port)
     {
         perror("bind");
         close(fd);
-        return -1;
+        exit(1);
     }
 
     if (listen(fd, BACKLOG) < 0)
     {
         perror("listen");
         close(fd);
-        return -1;
+        exit(1);
     }
 
     return fd;
@@ -105,7 +105,7 @@ static int accept_client(int server_fd)
     if (client_fd < 0)
     {
         perror("accept");
-        return -1;
+        exit(1);
     }
 
     printf("client connected: %s\n", inet_ntoa(client_addr.sin_addr));
@@ -117,11 +117,7 @@ static int accept_client(int server_fd)
 int main(int argc, char *argv[])
 {
     int port = get_port(argc, argv);
-    if (port < 0)
-        return 1;
     int server_fd = configure_server_socket(port);
-    if (server_fd < 0)
-        return 1;
 
     notify_init();
     setup_sigchld();
@@ -136,8 +132,6 @@ int main(int argc, char *argv[])
             continue;
 
         int client_fd = accept_client(server_fd);
-        if (client_fd < 0)
-            return -1;
 
         // parent reads [0], child writes [1]
         // for notify
@@ -172,8 +166,6 @@ int main(int argc, char *argv[])
         }
 
         // parent
-        // Parent: keep a dup of client_fd for sending notifications,
-        // then close the original (child has its own copy from fork).
         int parent_client_fd = dup(client_fd);
         close(pipefd[1]);
         close(client_fd);

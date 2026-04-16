@@ -181,8 +181,7 @@ void handle_client(int socket_fd)
     while (1)
     {
         // block
-        int n = read_message(socket_fd, buf, sizeof(buf));
-        if (n != 0) // disconnect
+        if (read_message(socket_fd, buf, sizeof(buf)) != 0)
             break;
 
         Request req;
@@ -193,14 +192,14 @@ void handle_client(int socket_fd)
             continue;
         }
 
-        // Validate token and extract login for authenticated routes
-        char req_login[MAX_LOGIN_LEN] = {0};
-        if (req.token && req.token[0] != '\0')
+        // extract login if token valid
+        if (req.token && req.token[0] != '\0' && login[0] == '\0')
         {
+            char req_login[MAX_LOGIN_LEN] = {0};
             if (validate_token(req.token, req_login) == 0)
             {
                 strncpy(login, req_login, MAX_LOGIN_LEN - 1);
-                notify_register(socket_fd, login);
+                notify_register(login);
             }
         }
 
@@ -216,9 +215,7 @@ void handle_client(int socket_fd)
 
         free_request(&req);
         if (resp.content)
-        {
             cJSON_Delete(resp.content);
-        }
     }
 
     notify_unregister(socket_fd);

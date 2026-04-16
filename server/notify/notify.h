@@ -4,7 +4,7 @@
 
 void notify_child_init(int pipe_write_fd);
 
-void notify_register(int socket_fd, const char *login);
+void notify_register(const char *login);
 void notify_unregister(int socket_fd);
 
 void notify_user(const char *login, Notification notif);
