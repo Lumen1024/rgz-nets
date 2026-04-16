@@ -43,12 +43,9 @@ Panel g_active = PANEL_NONE;
 
 // system bar
 char g_sys_msg[MAX_SYS_MSG] = {0};
-char g_sys_input[MAX_TEXT_LEN] = {0};
-int g_sys_input_len = 0;
-SysState g_sys_state = SYS_IDLE;
+time_t g_sys_msg_time = 0;
+SysMsgType g_sys_msg_type = SYS_INFO;
 
-// notification overlay
-char g_notify_text[256] = {0};
 
 // ui mutex
 pthread_mutex_t g_ui_mutex = PTHREAD_MUTEX_INITIALIZER;

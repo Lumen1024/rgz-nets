@@ -2,6 +2,7 @@
 
 #include <ncurses.h>
 #include <pthread.h>
+#include <time.h>
 #include <protocol.h>
 #include <config.h>
 #include <api/model.h>
@@ -41,11 +42,8 @@ extern Panel g_focus;
 extern Panel g_active;
 
 extern char g_sys_msg[MAX_SYS_MSG];
-extern char g_sys_input[MAX_TEXT_LEN];
-extern int g_sys_input_len;
-extern SysState g_sys_state;
-
-extern char g_notify_text[256];
+extern time_t g_sys_msg_time;
+extern SysMsgType g_sys_msg_type;
 
 extern pthread_mutex_t g_ui_mutex;
 

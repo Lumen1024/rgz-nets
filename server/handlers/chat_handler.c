@@ -7,6 +7,7 @@
 #include <response.h>
 #include <chat_repository.h>
 #include <user_repository.h>
+#include <notify/notify.h>
 
 Response handle_get_chats(const char *login) {
     char **names = NULL;
@@ -135,20 +136,25 @@ Response handle_add_chat_user(const char *name, Request *req) {
         return make_error(ERR_CONFLICT);
     }
 
+    notify_chat_members_changed(name);
     return make_success(NULL);
 }
 
-Response handle_remove_chat_user(const char *name, Request *req) {
-    if (!req->content) {
-        return make_error(ERR_BAD_REQUEST);
+Response handle_remove_chat_user(const char *name, Request *req, const char *requester_login) {
+    const char *login = NULL;
+
+    if (req->content) {
+        cJSON *login_j = cJSON_GetObjectItem(req->content, "login");
+        if (cJSON_IsString(login_j) && strlen(login_j->valuestring) > 0)
+            login = login_j->valuestring;
     }
 
-    cJSON *login_j = cJSON_GetObjectItem(req->content, "login");
-    if (!cJSON_IsString(login_j) || strlen(login_j->valuestring) == 0) {
-        return make_error(ERR_BAD_REQUEST);
-    }
+    // Empty or missing login means the requester wants to leave
+    if (!login || login[0] == '\0')
+        login = requester_login;
 
-    const char *login = login_j->valuestring;
+    if (!login || login[0] == '\0')
+        return make_error(ERR_BAD_REQUEST);
 
     if (!repo_chat_exists(name)) {
         return make_error(ERR_NOT_FOUND);
@@ -158,5 +164,6 @@ Response handle_remove_chat_user(const char *name, Request *req) {
         return make_error(ERR_NOT_FOUND);
     }
 
+    notify_chat_members_changed(name);
     return make_success(NULL);
 }

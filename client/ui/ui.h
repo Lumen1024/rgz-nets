@@ -2,6 +2,7 @@
 
 #include <protocol.h>
 #include <api/model.h>
+#include <config.h>
 
 // lifecycle
 void ui_init();
@@ -25,8 +26,8 @@ void ui_clear_chat();
 // notifications and status
 void ui_notify(const char *text);
 void ui_sys(const char *text);
-int ui_has_notify();
-void ui_clear_notify();
+void ui_sys_typed(const char *text, SysMsgType type);
+void ui_sys_tick();
 const char *ui_get_current_chat();
 
 // panel focus/active
@@ -54,9 +55,3 @@ void ui_input_append(char ch);
 void ui_input_backspace();
 void ui_input_clear();
 
-// sys bar input
-const char *ui_get_sys_input();
-int ui_get_sys_input_len();
-void ui_sys_input_append(char ch);
-void ui_sys_input_backspace();
-void ui_sys_input_clear();

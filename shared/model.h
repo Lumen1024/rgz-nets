@@ -20,10 +20,11 @@ typedef enum {
 } ErrorCode;
 
 typedef enum {
-    NOTIF_NEW_MESSAGE   = 1,
-    NOTIF_FILE_REQUEST  = 2,
-    NOTIF_FILE_APPROVED = 3,
-    NOTIF_FILE_DECLINED = 4,
+    NOTIF_NEW_MESSAGE            = 1,
+    NOTIF_FILE_REQUEST           = 2,
+    NOTIF_FILE_APPROVED          = 3,
+    NOTIF_FILE_DECLINED          = 4,
+    NOTIF_CHAT_MEMBERS_CHANGED   = 5,
 } NotifCode;
 
 typedef struct {

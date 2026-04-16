@@ -12,4 +12,13 @@ typedef enum
     CP_NOTIFY = 4,
     CP_SYS = 5,
     CP_DIM = 6,
+    CP_SYS_OK = 7,
+    CP_SYS_ERR = 8,
 } ColorPair;
+
+typedef enum
+{
+    SYS_INFO = 0,
+    SYS_OK,
+    SYS_ERR,
+} SysMsgType;

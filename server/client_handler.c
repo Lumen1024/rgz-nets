@@ -158,7 +158,7 @@ static Response dispatch(Request *req, const char *login)
         if (type == POST)
             return handle_add_chat_user(seg1, req);
         if (type == DELETE)
-            return handle_remove_chat_user(seg1, req);
+            return handle_remove_chat_user(seg1, req, login);
     }
 
     // /chats/{name}/messages
@@ -192,8 +192,9 @@ void handle_client(int socket_fd)
             continue;
         }
 
-        // extract login if token valid
-        if (req.token && req.token[0] != '\0' && login[0] == '\0')
+        // Validate token on every request
+        login[0] = '\0';
+        if (req.token && req.token[0] != '\0')
         {
             char req_login[MAX_LOGIN_LEN] = {0};
             if (validate_token(req.token, req_login) == 0)

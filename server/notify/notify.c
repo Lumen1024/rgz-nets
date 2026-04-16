@@ -115,3 +115,13 @@ void notify_new_private_message(const char *to, const char *from, const char *te
     notify_user(from, notif);
     cJSON_Delete(body);
 }
+
+void notify_chat_members_changed(const char *chat)
+{
+    cJSON *body = cJSON_CreateObject();
+    cJSON_AddStringToObject(body, "chat", chat);
+
+    Notification notif = {MSG_NOTIFICATION, NOTIF_CHAT_MEMBERS_CHANGED, body};
+    notify_chat(chat, notif);
+    cJSON_Delete(body);
+}

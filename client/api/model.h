@@ -18,10 +18,5 @@ typedef enum
     PANEL_SYS = 2,
 } Panel;
 
-typedef enum
-{
-    SYS_IDLE = 0,
-    SYS_WAIT_CONFIRM,
-} SysState;
 
 void message_from_json(cJSON *item, Message *out);

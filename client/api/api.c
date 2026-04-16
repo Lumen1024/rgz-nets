@@ -340,6 +340,19 @@ int api_remove_chat_user(const char *chat, const char *login)
     return code;
 }
 
+int api_delete_chat(const char *chat)
+{
+    char route[MAX_ROUTE_LEN];
+    snprintf(route, sizeof(route), "/chats/%s", chat);
+
+    Request req = make_req(DELETE, route, NULL);
+    Response res = send_and_wait(req);
+
+    int code = res.code;
+    free_response(&res);
+    return code;
+}
+
 int api_leave_chat(const char *chat)
 {
     cJSON *body = cJSON_CreateObject();

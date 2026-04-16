@@ -2,6 +2,7 @@
 #include <ui.h>
 #include <api.h>
 #include <protocol.h>
+#include <config.h>
 
 #include <string.h>
 #include <stdlib.h>
@@ -42,29 +43,51 @@ static void reload_chat_list()
     }
 }
 
-typedef struct
-{
-    char name[MAX_ROUTE_LEN];
-} CreateArgs;
-typedef struct
-{
-    char chat[MAX_ROUTE_LEN];
-    char login[MAX_LOGIN_LEN];
-} AddUserArgs;
-typedef struct
-{
-    char chat[MAX_ROUTE_LEN];
-    char login[MAX_LOGIN_LEN];
-} RemoveUserArgs;
-typedef struct
-{
-    char chat[MAX_ROUTE_LEN];
-} LeaveArgs;
+
+typedef struct { char name[MAX_ROUTE_LEN]; } CreateArgs;
+typedef struct { char name[MAX_ROUTE_LEN]; } DeleteChatArgs;
+typedef struct { char chat[MAX_ROUTE_LEN]; char login[MAX_LOGIN_LEN]; } AddUserArgs;
+typedef struct { char chat[MAX_ROUTE_LEN]; char login[MAX_LOGIN_LEN]; } RemoveUserArgs;
+typedef struct { char chat[MAX_ROUTE_LEN]; } LeaveArgs;
 
 static void *thread_create_chat(void *arg)
 {
     CreateArgs *a = arg;
-    api_create_chat(a->name);
+    int code = api_create_chat(a->name);
+    if (code == ERR_OK)
+    {
+        char msg[MAX_SYS_MSG];
+        snprintf(msg, sizeof(msg), "Chat '%s' created", a->name);
+        ui_sys_typed(msg, SYS_OK);
+        reload_chat_list();
+    }
+    else
+    {
+        ui_sys_typed("Failed to create chat", SYS_ERR);
+    }
+    free(a);
+    return NULL;
+}
+
+static void *thread_delete_chat(void *arg)
+{
+    DeleteChatArgs *a = arg;
+    int code = api_delete_chat(a->name);
+    if (code == ERR_OK)
+    {
+        char msg[MAX_SYS_MSG];
+        snprintf(msg, sizeof(msg), "Chat '%s' deleted", a->name);
+        ui_sys_typed(msg, SYS_OK);
+        reload_chat_list();
+    }
+    else if (code == ERR_FORBIDDEN)
+    {
+        ui_sys_typed("Error: only the owner can delete the chat", SYS_ERR);
+    }
+    else
+    {
+        ui_sys_typed("Failed to delete chat", SYS_ERR);
+    }
     free(a);
     return NULL;
 }
@@ -72,7 +95,17 @@ static void *thread_create_chat(void *arg)
 static void *thread_add_user(void *arg)
 {
     AddUserArgs *a = arg;
-    api_add_chat_user(a->chat, a->login);
+    int code = api_add_chat_user(a->chat, a->login);
+    if (code == ERR_OK)
+    {
+        char msg[MAX_SYS_MSG];
+        snprintf(msg, sizeof(msg), "Added '%s' to '%s'", a->login, a->chat);
+        ui_sys_typed(msg, SYS_OK);
+    }
+    else
+    {
+        ui_sys_typed("Failed to add user", SYS_ERR);
+    }
     free(a);
     return NULL;
 }
@@ -80,7 +113,17 @@ static void *thread_add_user(void *arg)
 static void *thread_remove_user(void *arg)
 {
     RemoveUserArgs *a = arg;
-    api_remove_chat_user(a->chat, a->login);
+    int code = api_remove_chat_user(a->chat, a->login);
+    if (code == ERR_OK)
+    {
+        char msg[MAX_SYS_MSG];
+        snprintf(msg, sizeof(msg), "Removed '%s' from '%s'", a->login, a->chat);
+        ui_sys_typed(msg, SYS_OK);
+    }
+    else
+    {
+        ui_sys_typed("Failed to remove user", SYS_ERR);
+    }
     free(a);
     return NULL;
 }
@@ -88,7 +131,11 @@ static void *thread_remove_user(void *arg)
 static void *thread_leave_chat(void *arg)
 {
     LeaveArgs *a = arg;
-    api_leave_chat(a->chat);
+    int code = api_leave_chat(a->chat);
+    if (code == ERR_OK)
+        ui_sys_typed("Left the chat", SYS_OK);
+    else
+        ui_sys_typed("Failed to leave chat", SYS_ERR);
     free(a);
     return NULL;
 }
@@ -104,16 +151,13 @@ void handle_command(const char *cmd)
         const char *name = cmd + 8;
         if (!name[0])
         {
-            ui_sys("Usage: /create <chatname>");
+            ui_sys_typed("Usage: /create <chatname>", SYS_ERR);
             return;
         }
         CreateArgs *a = malloc(sizeof(CreateArgs));
         strncpy(a->name, name, sizeof(a->name) - 1);
         pthread_create(&tid, NULL, thread_create_chat, a);
         pthread_detach(tid);
-        snprintf(arg, sizeof(arg), "Creating chat '%s'...", name);
-        ui_sys(arg);
-        reload_chat_list();
         return;
     }
 
@@ -122,12 +166,12 @@ void handle_command(const char *cmd)
         const char *login = cmd + 5;
         if (!login[0])
         {
-            ui_sys("Usage: /add <username>");
+            ui_sys_typed("Usage: /add <username>", SYS_ERR);
             return;
         }
         if (!current_chat_name(chat, sizeof(chat)))
         {
-            ui_sys("Error: not in a group chat");
+            ui_sys_typed("Error: not in a group chat", SYS_ERR);
             return;
         }
         AddUserArgs *a = malloc(sizeof(AddUserArgs));
@@ -135,22 +179,38 @@ void handle_command(const char *cmd)
         strncpy(a->login, login, sizeof(a->login) - 1);
         pthread_create(&tid, NULL, thread_add_user, a);
         pthread_detach(tid);
-        snprintf(arg, sizeof(arg), "Adding '%s' to '%s'...", login, chat);
-        ui_sys(arg);
         return;
     }
 
     if (strncmp(cmd, "/delete ", 8) == 0)
     {
-        const char *login = cmd + 8;
+        const char *name = cmd + 8;
+        if (!name[0])
+        {
+            ui_sys_typed("Usage: /delete <chatname>", SYS_ERR);
+            return;
+        }
+        DeleteChatArgs *a = malloc(sizeof(DeleteChatArgs));
+        strncpy(a->name, name, sizeof(a->name) - 1);
+        pthread_create(&tid, NULL, thread_delete_chat, a);
+        pthread_detach(tid);
+        char cur_name[MAX_ROUTE_LEN];
+        if (current_chat_name(cur_name, sizeof(cur_name)) && strcmp(cur_name, name) == 0)
+            ui_clear_chat();
+        return;
+    }
+
+    if (strncmp(cmd, "/delete-member ", 15) == 0)
+    {
+        const char *login = cmd + 15;
         if (!login[0])
         {
-            ui_sys("Usage: /delete <username>");
+            ui_sys_typed("Usage: /delete-member <username>", SYS_ERR);
             return;
         }
         if (!current_chat_name(chat, sizeof(chat)))
         {
-            ui_sys("Error: not in a group chat");
+            ui_sys_typed("Error: not in a group chat", SYS_ERR);
             return;
         }
         RemoveUserArgs *a = malloc(sizeof(RemoveUserArgs));
@@ -158,8 +218,6 @@ void handle_command(const char *cmd)
         strncpy(a->login, login, sizeof(a->login) - 1);
         pthread_create(&tid, NULL, thread_remove_user, a);
         pthread_detach(tid);
-        snprintf(arg, sizeof(arg), "Removing '%s' from '%s'...", login, chat);
-        ui_sys(arg);
         return;
     }
 
@@ -167,12 +225,12 @@ void handle_command(const char *cmd)
     {
         if (is_private_chat())
         {
-            ui_sys("Error: cannot leave a private dialog");
+            ui_sys_typed("Error: cannot leave a private dialog", SYS_ERR);
             return;
         }
         if (!current_chat_name(chat, sizeof(chat)))
         {
-            ui_sys("Error: not in a group chat");
+            ui_sys_typed("Error: not in a group chat", SYS_ERR);
             return;
         }
         LeaveArgs *a = malloc(sizeof(LeaveArgs));
@@ -181,24 +239,10 @@ void handle_command(const char *cmd)
         pthread_detach(tid);
         ui_clear_chat();
         reload_chat_list();
-        ui_sys("Left the chat.");
         return;
     }
 
     snprintf(arg, sizeof(arg), "Unknown command: %s", cmd);
-    ui_sys(arg);
+    ui_sys_typed(arg, SYS_ERR);
 }
 
-void handle_sys_input()
-{
-    if (ui_get_sys_input_len() == 0)
-        return;
-
-    const char *input = ui_get_sys_input();
-    if (input[0] == '/')
-        handle_command(input);
-    else
-        ui_sys(input);
-
-    ui_sys_input_clear();
-}

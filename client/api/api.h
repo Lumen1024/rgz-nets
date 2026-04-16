@@ -15,6 +15,7 @@ int         api_register(const char *login, const char *password);
 const char *api_get_login();
 int api_send_message(const char *route, const char *text);
 int api_create_chat(const char *name);
+int api_delete_chat(const char *chat);
 int api_add_chat_user(const char *chat, const char *login);
 int api_remove_chat_user(const char *chat, const char *login);
 int api_leave_chat(const char *chat);

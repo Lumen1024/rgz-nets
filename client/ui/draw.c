@@ -75,17 +75,7 @@ void draw_chat_panel()
 
     mvwhline(g_win_chat_in, msg_h, 0, ACS_HLINE, inner_w);
 
-    if (g_active == PANEL_CHAT)
-    {
-        curs_set(1);
-        mvwprintw(g_win_chat_in, msg_h + 1, 0, "> %s", g_input);
-        wmove(g_win_chat_in, msg_h + 1, 2 + g_input_len);
-    }
-    else
-    {
-        curs_set(0);
-        mvwprintw(g_win_chat_in, msg_h + 1, 0, "> ");
-    }
+    mvwprintw(g_win_chat_in, msg_h + 1, 0, "> %s", g_input);
 
     wnoutrefresh(g_win_chat);
     wnoutrefresh(g_win_chat_in);
@@ -167,8 +157,7 @@ void draw_list_panel()
 
 void draw_sys_bar()
 {
-    int cp = get_border_color(PANEL_SYS);
-    wattron(g_win_sys, COLOR_PAIR(cp));
+    werase(g_win_sys);
     box(g_win_sys, 0, 0);
 
     int bar_w;
@@ -179,50 +168,17 @@ void draw_sys_bar()
     }
 
     mvwprintw(g_win_sys, 0, 2, " System ");
-    wattroff(g_win_sys, COLOR_PAIR(cp));
 
-    wattron(g_win_sys, COLOR_PAIR(CP_SYS));
-    mvwprintw(g_win_sys, 1, 1, "%-*.*s", bar_w - 2, bar_w - 2, g_sys_msg);
-    wattroff(g_win_sys, COLOR_PAIR(CP_SYS));
-
-    if (g_active == PANEL_SYS)
+    if (g_sys_msg[0])
     {
-        curs_set(1);
-        mvwprintw(g_win_sys, 1, 1, "> %-*.*s", bar_w - 4, bar_w - 4, g_sys_input);
-        wmove(g_win_sys, 1, 3 + g_sys_input_len);
-    }
-    else
-    {
-        curs_set(0);
+        int cp = (g_sys_msg_type == SYS_OK)  ? CP_SYS_OK :
+                 (g_sys_msg_type == SYS_ERR) ? CP_SYS_ERR : CP_SYS;
+        wattron(g_win_sys, COLOR_PAIR(cp));
+        mvwprintw(g_win_sys, 1, 2, "%-*.*s", bar_w - 3, bar_w - 3, g_sys_msg);
+        wattroff(g_win_sys, COLOR_PAIR(cp));
     }
 
     wnoutrefresh(g_win_sys);
-}
-
-void draw_notify()
-{
-    if (!g_notify_text[0])
-        return;
-
-    int rows, cols;
-    getmaxyx(stdscr, rows, cols);
-    (void)rows;
-
-    int nw = (int)strlen(g_notify_text) + 4;
-    if (nw > cols - 4)
-        nw = cols - 4;
-    int nx = (cols - nw) / 2;
-    int ny = g_main_h - 4;
-    if (ny < 0)
-        ny = 0;
-
-    WINDOW *w = newwin(3, nw, ny, nx);
-    wattron(w, COLOR_PAIR(CP_NOTIFY));
-    box(w, 0, 0);
-    mvwprintw(w, 1, 2, "%.*s", nw - 4, g_notify_text);
-    wattroff(w, COLOR_PAIR(CP_NOTIFY));
-    wrefresh(w);
-    delwin(w);
 }
 
 void draw_all()
@@ -231,7 +187,17 @@ void draw_all()
     draw_chat_panel();
     draw_list_panel();
     draw_sys_bar();
+
+    if (g_active == PANEL_CHAT)
+    {
+        curs_set(1);
+        wnoutrefresh(g_win_chat_in);
+    }
+    else
+    {
+        curs_set(0);
+    }
+
     doupdate();
-    draw_notify();
     pthread_mutex_unlock(&g_ui_mutex);
 }

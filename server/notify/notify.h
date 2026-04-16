@@ -10,3 +10,4 @@ void notify_chat(const char *chat_name, Notification notif);
 
 void notify_new_chat_message(const char *chat, const char *login, const char *text);
 void notify_new_private_message(const char *to, const char *from, const char *text);
+void notify_chat_members_changed(const char *chat);

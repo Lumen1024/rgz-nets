@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <pthread.h>
 
+static void handle_key_chat(int ch);
+
 typedef struct
 {
     char route[MAX_ROUTE_LEN];
@@ -122,58 +124,29 @@ static void open_selected_item()
     }
 }
 
-static void handle_key_sys(int ch)
-{
-    switch (ch)
-    {
-    case '\n':
-    case KEY_ENTER:
-        handle_sys_input();
-        ui_set_active(PANEL_NONE);
-        break;
-    case KEY_BACKSPACE:
-    case 127:
-        ui_sys_input_backspace();
-        break;
-    case 27:
-        ui_sys_input_clear();
-        ui_set_active(PANEL_NONE);
-        break;
-    default:
-        if (ch >= 32)
-            ui_sys_input_append((char)ch);
-        break;
-    }
-}
-
 static void handle_key_nav(int ch)
 {
     Panel focus = ui_get_focus();
     switch (ch)
     {
     case KEY_LEFT:
-        if (focus == PANEL_LIST || focus == PANEL_SYS)
+        if (focus == PANEL_LIST)
             ui_set_focus(PANEL_CHAT);
         break;
     case KEY_RIGHT:
-        if (focus == PANEL_CHAT || focus == PANEL_SYS)
+        if (focus == PANEL_CHAT)
             ui_set_focus(PANEL_LIST);
-        break;
-    case KEY_DOWN:
-        if (focus != PANEL_SYS)
-            ui_set_focus(PANEL_SYS);
-        break;
-    case KEY_UP:
-        if (focus == PANEL_SYS)
-            ui_set_focus(PANEL_CHAT);
         break;
     case '\n':
     case KEY_ENTER:
         ui_set_active(focus);
-        if (ui_get_active() == PANEL_SYS)
-            ui_sys_input_clear();
         break;
     default:
+        if (ch >= 32)
+        {
+            ui_set_active(PANEL_CHAT);
+            handle_key_chat(ch);
+        }
         break;
     }
 }
@@ -253,14 +226,14 @@ static void handle_key_chat(int ch)
         break;
     case '\n':
     case KEY_ENTER:
-        if (ui_get_input_len() > 0 && ui_get_current_chat())
+        if (ui_get_input_len() > 0)
         {
             const char *input = ui_get_input();
             if (input[0] == '/')
             {
                 handle_command(input);
             }
-            else
+            else if (ui_get_current_chat())
             {
                 SendArgs *a = malloc(sizeof(SendArgs));
                 strncpy(a->route, ui_get_current_chat(), sizeof(a->route) - 1);
@@ -296,17 +269,16 @@ void ui_run()
     int ch;
     while ((ch = getch()) != 'q')
     {
-        if (ui_has_notify())
+        ui_sys_tick();
+
+        if (ch == ERR)
         {
-            ui_clear_notify();
             ui_redraw();
             continue;
         }
 
         Panel active = ui_get_active();
-        if (active == PANEL_SYS)
-            handle_key_sys(ch);
-        else if (active == PANEL_NONE)
+        if (active == PANEL_NONE)
             handle_key_nav(ch);
         else if (active == PANEL_LIST)
             handle_key_list(ch);

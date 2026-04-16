@@ -9,6 +9,9 @@
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
+#include <time.h>
+
+#define SYS_MSG_TTL 4
 
 static int utf8_backspace(char *buf, int len)
 {
@@ -25,7 +28,7 @@ void ui_init()
 {
     set_escdelay(25);
     initscr();
-    cbreak();
+    halfdelay(10);
     noecho();
     curs_set(0);
     keypad(stdscr, TRUE);
@@ -37,6 +40,8 @@ void ui_init()
     init_pair(CP_NOTIFY, COLOR_BLACK, COLOR_YELLOW);
     init_pair(CP_SYS, COLOR_CYAN, COLOR_BLACK);
     init_pair(CP_DIM, COLOR_WHITE, COLOR_BLACK);
+    init_pair(CP_SYS_OK, COLOR_GREEN, COLOR_BLACK);
+    init_pair(CP_SYS_ERR, COLOR_RED, COLOR_BLACK);
 
     getmaxyx(stdscr, g_rows, g_cols);
     g_main_h = g_rows - SYS_BAR_H;
@@ -217,30 +222,35 @@ void ui_clear_chat()
 
 void ui_notify(const char *text)
 {
-    pthread_mutex_lock(&g_ui_mutex);
-    strncpy(g_notify_text, text, sizeof(g_notify_text) - 1);
-    pthread_mutex_unlock(&g_ui_mutex);
-    draw_all();
+    ui_sys_typed(text, SYS_INFO);
 }
 
 void ui_sys(const char *text)
 {
+    ui_sys_typed(text, SYS_INFO);
+}
+
+void ui_sys_typed(const char *text, SysMsgType type)
+{
     pthread_mutex_lock(&g_ui_mutex);
     strncpy(g_sys_msg, text, MAX_SYS_MSG - 1);
+    g_sys_msg_time = time(NULL);
+    g_sys_msg_type = type;
     pthread_mutex_unlock(&g_ui_mutex);
     draw_sys_bar();
-    wnoutrefresh(g_win_sys);
     doupdate();
 }
 
-int ui_has_notify()
+void ui_sys_tick()
 {
-    return g_notify_text[0] != '\0';
-}
-
-void ui_clear_notify()
-{
-    g_notify_text[0] = '\0';
+    if (g_sys_msg[0] && time(NULL) - g_sys_msg_time >= SYS_MSG_TTL)
+    {
+        pthread_mutex_lock(&g_ui_mutex);
+        g_sys_msg[0] = '\0';
+        pthread_mutex_unlock(&g_ui_mutex);
+        draw_sys_bar();
+        doupdate();
+    }
 }
 
 const char *ui_get_current_chat()
@@ -320,26 +330,3 @@ void ui_input_clear()
     g_input_len = 0;
 }
 
-const char *ui_get_sys_input() { return g_sys_input; }
-int ui_get_sys_input_len() { return g_sys_input_len; }
-
-void ui_sys_input_append(char ch)
-{
-    if (g_sys_input_len < MAX_TEXT_LEN - 1)
-    {
-        g_sys_input[g_sys_input_len++] = ch;
-        g_sys_input[g_sys_input_len] = '\0';
-    }
-}
-
-void ui_sys_input_backspace()
-{
-    g_sys_input_len = utf8_backspace(g_sys_input, g_sys_input_len);
-}
-
-void ui_sys_input_clear()
-{
-    g_sys_input[0] = '\0';
-    g_sys_input_len = 0;
-    g_sys_state = SYS_IDLE;
-}
