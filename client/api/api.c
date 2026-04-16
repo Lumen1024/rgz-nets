@@ -1,5 +1,5 @@
 #include <api.h>
-#include <model.h>
+#include <api/model.h>
 #include <state.h>
 #include <request.h>
 #include <response.h>
@@ -7,6 +7,7 @@
 #include <socket_utils.h>
 #include <protocol.h>
 #include <cJSON.h>
+#include <logic/notification.h>
 
 #include <string.h>
 #include <stdio.h>

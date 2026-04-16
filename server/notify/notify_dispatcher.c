@@ -15,8 +15,6 @@
 
 void notify_client_add(pid_t pid, int pipe_read_fd, int client_fd)
 {
-    if (!g_shared)
-        return;
     pthread_mutex_lock(&g_shared->lock);
     if (g_shared->count < MAX_CLIENTS)
     {

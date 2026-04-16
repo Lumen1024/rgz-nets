@@ -30,7 +30,8 @@ CLIENT_OBJS = $(patsubst %.c,$(OBJ_DIR)/%.o,$(CLIENT_SRCS))
 CLIENT_BIN  = $(BIN_DIR)/client
 
 # Include paths
-INCLUDES = -I$(LIB_DIR) -I$(SHARED_DIR) -I$(SHARED_DIR)/protocol -I$(SERVER_DIR) -I$(SERVER_DIR)/handlers -I$(SERVER_DIR)/repositories -I$(SERVER_DIR)/notify -I$(CLIENT_DIR)
+SERVER_INCLUDES = -I$(LIB_DIR) -I$(SHARED_DIR) -I$(SHARED_DIR)/protocol -I$(SERVER_DIR) -I$(SERVER_DIR)/handlers -I$(SERVER_DIR)/repositories -I$(SERVER_DIR)/notify
+CLIENT_INCLUDES = -I$(LIB_DIR) -I$(SHARED_DIR) -I$(SHARED_DIR)/protocol -I$(CLIENT_DIR) -I$(CLIENT_DIR)/api -I$(CLIENT_DIR)/logic -I$(CLIENT_DIR)/ui
 
 .PHONY: all clean shared server client dirs
 
@@ -43,16 +44,26 @@ dirs:
 	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/handlers
 	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/repositories
 	@mkdir -p $(OBJ_DIR)/$(SERVER_DIR)/notify
-	@mkdir -p $(OBJ_DIR)/$(CLIENT_DIR)
+	@mkdir -p $(OBJ_DIR)/$(CLIENT_DIR)/api
+	@mkdir -p $(OBJ_DIR)/$(CLIENT_DIR)/logic
+	@mkdir -p $(OBJ_DIR)/$(CLIENT_DIR)/ui
 	@mkdir -p $(OBJ_DIR)/$(LIB_DIR)
 
 # Compile cJSON
 $(CJSON_OBJ): $(CJSON_SRC)
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+	$(CC) $(CFLAGS) $(SERVER_INCLUDES) -c $< -o $@
 
-# Generic rule for .c -> bin/obj/...
-$(OBJ_DIR)/%.o: %.c
-	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
+# Compile shared sources
+$(OBJ_DIR)/$(SHARED_DIR)/%.o: $(SHARED_DIR)/%.c
+	$(CC) $(CFLAGS) $(SERVER_INCLUDES) -c $< -o $@
+
+# Compile server sources
+$(OBJ_DIR)/$(SERVER_DIR)/%.o: $(SERVER_DIR)/%.c
+	$(CC) $(CFLAGS) $(SERVER_INCLUDES) -c $< -o $@
+
+# Compile client sources
+$(OBJ_DIR)/$(CLIENT_DIR)/%.o: $(CLIENT_DIR)/%.c
+	$(CC) $(CFLAGS) $(CLIENT_INCLUDES) -c $< -o $@
 
 # Build shared static library
 $(SHARED_LIB): $(SHARED_OBJS)

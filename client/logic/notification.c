@@ -1,5 +1,5 @@
 #include <notification.h>
-#include <model.h>
+#include <api/model.h>
 #include <ui.h>
 #include <protocol.h>
 
@@ -52,7 +52,7 @@ void handle_notification(Notification *notif)
         }
         else if (msg.login[0] && msg.text[0])
         {
-            char notif_text[256];
+            char notif_text[MAX_ROUTE_LEN + MAX_LOGIN_LEN + MAX_TEXT_LEN];
             snprintf(notif_text, sizeof(notif_text), "[%s] %s: %s",
                      msg_route[0] ? msg_route : "?", msg.login, msg.text);
             ui_notify(notif_text);

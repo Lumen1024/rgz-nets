@@ -4,7 +4,7 @@
 #include <pthread.h>
 #include <protocol.h>
 #include <config.h>
-#include <model.h>
+#include <api/model.h>
 
 
 extern WINDOW *g_win_chat;
