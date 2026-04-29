@@ -5,8 +5,20 @@
 #include <time.h>
 #include <protocol.h>
 #include <config.h>
-#include <api/model.h>
+typedef enum
+{
+    LIST_MODE_CHATS = 0,
+    LIST_MODE_USERS = 1,
+    LIST_MODE_MEMBERS = 2,
+} ListMode;
 
+typedef enum
+{
+    PANEL_NONE = -1,
+    PANEL_CHAT = 0,
+    PANEL_LIST = 1,
+    PANEL_SYS = 2,
+} Panel;
 
 extern WINDOW *g_win_chat;
 extern WINDOW *g_win_chat_in;

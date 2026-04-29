@@ -6,7 +6,7 @@
 #include <string.h>
 #include <time.h>
 
-#define SECRET_KEY "rgz_secret_key"
+#define SECRET_KEY "dsowfmofmsdkosfmsdf"
 
 // djb2 hash algorithm
 static unsigned long djb2(const char *str)

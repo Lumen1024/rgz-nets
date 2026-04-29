@@ -1,5 +1,4 @@
 #include <notification.h>
-#include <api/model.h>
 #include <api.h>
 #include <ui.h>
 #include <protocol.h>

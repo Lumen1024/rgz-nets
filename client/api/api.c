@@ -1,5 +1,4 @@
 #include <api.h>
-#include <api/model.h>
 #include <state.h>
 #include <request.h>
 #include <response.h>
@@ -21,15 +20,15 @@
 static int g_socket_fd = -1;
 
 static pthread_mutex_t g_resp_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t  g_resp_cond  = PTHREAD_COND_INITIALIZER;
-static Response        g_pending_response;
-static int             g_response_ready = 0;
+static pthread_cond_t g_resp_cond = PTHREAD_COND_INITIALIZER;
+static Response g_pending_response;
+static int g_response_ready = 0;
 
 static void reader_on_response(Response *res)
 {
     pthread_mutex_lock(&g_resp_mutex);
     g_pending_response = *res;
-    g_response_ready   = 1;
+    g_response_ready = 1;
     pthread_cond_signal(&g_resp_cond);
     pthread_mutex_unlock(&g_resp_mutex);
 }
@@ -76,7 +75,7 @@ int connect_to_server(const char *host, int port)
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
-    addr.sin_port   = htons((uint16_t)port);
+    addr.sin_port = htons((uint16_t)port);
 
     if (inet_pton(AF_INET, host, &addr.sin_addr) <= 0)
     {
@@ -369,4 +368,3 @@ int api_leave_chat(const char *chat)
     free_response(&res);
     return code;
 }
-

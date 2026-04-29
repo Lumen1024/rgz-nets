@@ -1,8 +1,8 @@
 #pragma once
 
 #include <protocol.h>
-#include <api/model.h>
 #include <config.h>
+#include <state.h>
 
 // lifecycle
 void ui_init();

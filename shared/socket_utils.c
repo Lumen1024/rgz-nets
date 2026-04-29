@@ -56,22 +56,3 @@ int write_message(int socket_fd, const char *data)
 
     return 0;
 }
-
-int get_peer_ip(int socket_fd, char *ip_out)
-{
-    struct sockaddr_in addr;
-    socklen_t addr_len = sizeof(addr);
-
-    if (getpeername(socket_fd, (struct sockaddr *)&addr, &addr_len) == -1)
-    {
-        return -1;
-    }
-
-    const char *result = inet_ntop(AF_INET, &addr.sin_addr, ip_out, INET_ADDRSTRLEN);
-    if (result == NULL)
-    {
-        return -1;
-    }
-
-    return 0;
-}

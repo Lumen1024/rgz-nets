@@ -7,3 +7,4 @@ docs/
 data/
 lib/cJSON.c
 lib/cJSON.h
+/assets
