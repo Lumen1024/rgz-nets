@@ -14,7 +14,6 @@
 #include <auth_handler.h>
 #include <chat_handler.h>
 #include <message_handler.h>
-#include <file_handler.h>
 #include <user_repository.h>
 #include <notify/notify.h>
 
@@ -113,21 +112,6 @@ static Response dispatch(Request *req, const char *login)
             return handle_get_private_messages(login, seg1);
         if (type == POST)
             return handle_post_private_message(seg1, req, login);
-    }
-
-    // /users/{login}/files
-    if (strcmp(seg0, "users") == 0 && depth == 3 && strcmp(seg2, "files") == 0 && type == POST)
-        return handle_file_request(seg1, req, login);
-
-    // /users/{login}/files/{id}/approve  or  /users/{login}/files/{id}/decline
-    if (strcmp(seg0, "users") == 0 && depth == 5 && strcmp(seg2, "files") == 0)
-    {
-        char seg4[MAX_ROUTE_LEN] = {0};
-        route_segment(route, 4, seg4, sizeof(seg4));
-        if (strcmp(seg4, "approve") == 0 && type == POST)
-            return handle_file_approve(seg1, seg3);
-        if (strcmp(seg4, "decline") == 0 && type == POST)
-            return handle_file_decline(seg1, seg3);
     }
 
     // GET/POST /chats

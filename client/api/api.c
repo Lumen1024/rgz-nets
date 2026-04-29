@@ -370,23 +370,3 @@ int api_leave_chat(const char *chat)
     return code;
 }
 
-int api_send_file(const char *to, const char *filepath)
-{
-    const char *filename = strrchr(filepath, '/');
-    filename = filename ? filename + 1 : filepath;
-
-    cJSON *body = cJSON_CreateObject();
-    cJSON_AddStringToObject(body, "filename", filename);
-    cJSON_AddNumberToObject(body, "size", 0);
-
-    char route[MAX_ROUTE_LEN];
-    snprintf(route, sizeof(route), "/users/%s/files", to);
-
-    Request req = make_req(POST, route, body);
-    Response res = send_and_wait(req);
-    cJSON_Delete(body);
-
-    int code = res.code;
-    free_response(&res);
-    return code;
-}

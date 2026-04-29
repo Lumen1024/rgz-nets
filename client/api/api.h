@@ -19,4 +19,3 @@ int api_delete_chat(const char *chat);
 int api_add_chat_user(const char *chat, const char *login);
 int api_remove_chat_user(const char *chat, const char *login);
 int api_leave_chat(const char *chat);
-int api_send_file(const char *to, const char *filepath);

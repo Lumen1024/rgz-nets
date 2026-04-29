@@ -100,21 +100,4 @@ void handle_notification(Notification *notif)
             ui_notify(notif_text);
         }
     }
-    else if (notif->code == NOTIF_FILE_REQUEST)
-    {
-        cJSON *content = notif->content;
-        if (!content)
-            return;
-
-        cJSON *from_item = cJSON_GetObjectItemCaseSensitive(content, "from");
-        cJSON *name_item = cJSON_GetObjectItemCaseSensitive(content, "filename");
-        cJSON *id_item = cJSON_GetObjectItemCaseSensitive(content, "file_id");
-
-        char msg[256];
-        snprintf(msg, sizeof(msg), "File request from %s: %s (id=%s)",
-                 cJSON_IsString(from_item) ? from_item->valuestring : "?",
-                 cJSON_IsString(name_item) ? name_item->valuestring : "?",
-                 cJSON_IsString(id_item) ? id_item->valuestring : "?");
-        ui_notify(msg);
-    }
 }
